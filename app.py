@@ -1,4 +1,4 @@
-# app.py (โค้ดฉบับสมบูรณ์สำหรับ Deploy)
+# app.py (UX Optimized)
 
 import streamlit as st
 import pandas as pd
@@ -7,15 +7,20 @@ import gspread
 import io 
 
 # --- 1. Global Configuration ---
-# Google Sheet ID ที่ดึงมาจาก URL
+# Google Sheet ID และ Worksheet Name
 GOOGLE_SHEET_ID = "1E6WpIgmUBZ2bPpBxSW08ktKUKJGahmzqjVcMDfsqMec"
-# ชื่อ Worksheet ภายใน Google Sheet ที่ต้องการบันทึกข้อมูล
 WORKSHEET_NAME = "FactoryAudit"
 
 # กำหนดเกณฑ์คะแนน
 SCORE_MAPPING = {
     'OK': 3, 'PRN': 2, 'NRIC': 1, 'Blank': 0 
 }
+
+# กำหนด Main Categories และ Remarks (สำหรับใช้ในตารางสรุป 7 ด้าน)
+MAIN_CATEGORIES = [
+    "บุคลากร", "เครื่องจักร", "วัสดุ", "วิธีการ", 
+    "การวัด", "สภาพแวดล้อม", "Documentation & Control"
+]
 
 def get_grade_and_description(percentage):
     """กำหนดเกรดและคำอธิบายตามเปอร์เซ็นต์คะแนนรวม"""
@@ -31,7 +36,7 @@ def get_grade_and_description(percentage):
 def process_checklist_data(uploaded_file):
     """ทำความสะอาดข้อมูล, คำนวณคะแนน, และสรุปผลจากไฟล์ที่อัปโหลด"""
 
-    # 1. Loading Metadata 
+    # 1. Loading Metadata (โหลดข้อมูลบริบทจากส่วนหัว)
     try:
         uploaded_file.seek(0)
         
@@ -40,19 +45,19 @@ def process_checklist_data(uploaded_file):
         else:
             df_metadata = pd.read_csv(uploaded_file, nrows=8, header=None)
         
+        # Mapping ข้อมูลจากตำแหน่งเซลล์ในไฟล์ (อิงตาม Value Column Index)
         metadata = {
-            'Date_of_Audit': df_metadata.iloc[4, 4],      # Row 4, Col C (Value)
-            'Time_Shift': df_metadata.iloc[4, 6],         # Row 4, Col F (Value)
-            'Factory': df_metadata.iloc[5, 4],            # Row 5, Col C (Value)
-            'Work_Area': df_metadata.iloc[5, 6],          # Row 5, Col F (Value)
-            'Observed_Personnel': df_metadata.iloc[6, 4], # Row 6, Col C (Value)
-            'Supervisor': df_metadata.iloc[6, 6],         # Row 6, Col F (Value)
-            'Machine_ID': df_metadata.iloc[7, 4],         # Row 7, Col C (Value)
-            'Auditor': df_metadata.iloc[7, 6],            # Row 7, Col F (Value)
+            'Date_of_Audit': df_metadata.iloc[2, 2],
+            'Time_Shift': df_metadata.iloc[2, 5],
+            'Factory': df_metadata.iloc[3, 2],
+            'Work_Area': df_metadata.iloc[3, 5],
+            'Observed_Personnel': df_metadata.iloc[4, 2],
+            'Supervisor': df_metadata.iloc[4, 5],
+            'Machine_ID': df_metadata.iloc[5, 2],
+            'Auditor': df_metadata.iloc[5, 5],
             'File_Name': uploaded_file.name
         }
     except Exception as e:
-        st.warning(f"ไม่สามารถดึงข้อมูล Metadata จากส่วนหัวของไฟล์ได้: {e}. ใช้ค่าว่างแทน")
         metadata = {
             'Date_of_Audit': 'N/A', 'Time_Shift': 'N/A', 'Factory': 'N/A', 'Work_Area': 'N/A', 
             'Observed_Personnel': 'N/A', 'Supervisor': 'N/A', 'Machine_ID': 'N/A', 
@@ -60,22 +65,17 @@ def process_checklist_data(uploaded_file):
         }
 
 
-    # 2. Loading Audit Questions
+    # 2. Loading Audit Questions 
     try:
         uploaded_file.seek(0) 
         
+        # Index คอลัมน์ที่ต้องการ: [1: หัวข้อ, 3: คำถาม, 4: OK, 5: PRN, 6: NRIC, 7: หมายเหตุ]
         col_indices = [1, 3, 4, 5, 6, 7] 
         
         if uploaded_file.name.endswith('.xlsx'):
-            df_audit = pd.read_excel(
-                uploaded_file, header=13, 
-                usecols=col_indices
-            )
+            df_audit = pd.read_excel(uploaded_file, header=13, usecols=col_indices)
         else:
-            df_audit = pd.read_csv(
-                uploaded_file, header=13,
-                usecols=col_indices
-            )
+            df_audit = pd.read_csv(uploaded_file, header=13, usecols=col_indices)
         
         df_audit.columns = ['หัวข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']
             
@@ -83,7 +83,6 @@ def process_checklist_data(uploaded_file):
         
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการอ่านไฟล์หรือโครงสร้างคอลัมน์ไม่ถูกต้อง: {e}")
-        st.info("โปรดตรวจสอบว่าไฟล์ที่อัปโหลดมีโครงสร้างคอลัมน์ตามที่กำหนด")
         return None, None, None
 
     # 3. Scoring: คำนวณคะแนนในแต่ละข้อ
@@ -111,6 +110,7 @@ def process_checklist_data(uploaded_file):
     percentage = (actual_score / total_possible_score) * 100 if total_possible_score > 0 else 0
     grade, grade_level, description = get_grade_and_description(percentage)
 
+    # คำนวณคะแนนรายหมวดหมู่ (Group Scores) 
     group_scores = {}
     if 'หัวข้อ' in df_audited_q.columns:
         for group, group_df in df_audited_q.groupby('หัวข้อ'):
@@ -118,13 +118,20 @@ def process_checklist_data(uploaded_file):
             group_score = group_df['Score'].sum()
             max_group_score = len(group_df) * SCORE_MAPPING['OK']
             
+            # เก็บค่า Actual และ Max ไว้ใน summary_data
             group_scores[f'Score_{group_name}_Actual'] = group_score
             group_scores[f'Score_{group_name}_Max'] = max_group_score
-    
+            
+            # หากต้องการเก็บข้อความหมายเหตุสำหรับหมวดหมู่นั้น (เป็นทางเลือก)
+            # group_remarks = group_df['หมายเหตุ'].dropna().tolist()
+            # group_scores[f'Remarks_{group_name}'] = "; ".join(group_remarks)
+            
+    # รวม Metadata, Summary และ Group Scores เข้าด้วยกัน
     summary_data = {
         'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         **metadata, 
         
+        # คะแนนรวม
         'Total_Questions_Audited': total_possible_questions,
         'Actual_Score': actual_score,
         'Max_Possible_Score': total_possible_score,
@@ -133,6 +140,7 @@ def process_checklist_data(uploaded_file):
         'Grade_Level': grade_level,
         'Description': description,
         
+        # คะแนนรายหมวดหมู่
         **group_scores 
     }
 
@@ -163,13 +171,13 @@ def save_to_google_sheet(summary_data):
     except Exception as e:
         return False, f"❌ เกิดข้อผิดพลาดในการบันทึก Google Sheet: {e}"
 
-# --- 4. Streamlit UI (แสดงผล) ---
+# --- 4. Streamlit UI (แสดงผลตาม Layout ใหม่) ---
 
 st.set_page_config(layout="wide", page_title="Heat Transfer Audit App")
 st.title("🔥 ระบบประเมิน Heat Transfer Process Audit")
 st.markdown("---")
 
-# 1. File Uploader
+# 1. อัปโหลดไฟล์ Heat Transfer Checklist
 st.header("1. อัปโหลดไฟล์ Heat Transfer Checklist")
 uploaded_file = st.file_uploader(
     "อัปโหลดไฟล์ที่กรอกข้อมูลแล้ว (.xlsx หรือ .csv)",
@@ -184,6 +192,7 @@ if uploaded_file is not None:
 
     if df_audit_result is not None:
         st.markdown("---")
+        # 2. ผลการประเมินคะแนนรวม
         st.header("2. ผลการประเมินคะแนนรวม")
         
         col1, col2, col3 = st.columns(3)
@@ -195,26 +204,28 @@ if uploaded_file is not None:
         
         st.markdown("---")
         
-        ### 3. ตารางสรุปคะแนน 7 ด้าน
+        ### 3. ตารางสรุปคะแนน 7 ด้าน (4 คอลัมน์หลัก)
         st.header("3. สรุปคะแนนตามด้านการตรวจสอบ (7 Categories)")
         
         group_summary_data = []
-        for key, value in summary.items():
-            if key.startswith('Score_') and key.endswith('_Actual'):
-                category_name = key.replace('Score_', '').replace('_Actual', '').replace('_', ' ')
-                max_key = key.replace('_Actual', '_Max')
-                
-                actual = value
-                max_score = summary.get(max_key, 0)
-                
-                percentage = (actual / max_score) * 100 if max_score > 0 else 0
-                
-                group_summary_data.append({
-                    'ด้านที่ตรวจสอบ (Category)': category_name.title(),
-                    'คะแนนที่ได้ (Actual)': actual,
-                    'คะแนนสูงสุด (Max)': max_score,
-                    'เปอร์เซ็นต์ (%)': f"{percentage:.2f}%"
-                })
+        for category_th in MAIN_CATEGORIES:
+            # แปลงชื่อไทยเป็น key format (e.g., บุคลากร -> บุคลากร)
+            key_name = category_th.replace(" ", "_").replace("&", "").strip() 
+            
+            actual = summary.get(f'Score_{key_name}_Actual', 0)
+            max_score = summary.get(f'Score_{key_name}_Max', 0)
+            
+            percentage = (actual / max_score) * 100 if max_score > 0 else 0
+            
+            # ดึง Remarks (ถ้าต้องการแสดงในตารางสรุปหลัก - ต้องมีการรวบรวม Remarks ก่อน)
+            # ในโค้ดปัจจุบันไม่มีการรวบรวม remarks ราย category จึงใช้ค่าว่าง
+            
+            group_summary_data.append({
+                'Main Category': category_th,
+                'คะแนนที่ได้': f"{actual} / {max_score}",
+                'เปอร์เซ็นต์ (%)': f"{percentage:.2f}%",
+                'หมายเหตุ': ' ' # ช่องว่าง, หากต้องการให้แสดงข้อความสรุป remarks ต้องเพิ่มตรรกะรวบรวม remarks ใน process_checklist_data
+            })
 
         df_group_summary = pd.DataFrame(group_summary_data)
         st.dataframe(
@@ -225,11 +236,11 @@ if uploaded_file is not None:
         
         st.markdown("---")
         
-        ### 4. รายละเอียดการประเมินรายข้อและ Metadata
+        ### 4. ข้อมูลทั่วไป (Metadata)
         
-        st.header("4. ข้อมูลส่วนหัวของฟอร์ม (Metadata)")
+        st.header("4. ข้อมูลทั่วไป")
         
-        # 4a. สร้างตาราง Metadata 
+        # จัด Metadata ในรูปแบบตาราง 2 คอลัมน์
         metadata_map = {
             'วันที่ตรวจสอบ': summary.get('Date_of_Audit'),
             'เวลา/รอบการทำงาน': summary.get('Time_Shift'),
@@ -242,17 +253,24 @@ if uploaded_file is not None:
             'ชื่อไฟล์ที่อัปโหลด': summary.get('File_Name'),
         }
         
-        # แปลง Dictionary เป็น DataFrame สำหรับแสดงผลเป็นตาราง
         df_metadata_table = pd.DataFrame(metadata_map.items(), columns=['หัวข้อ', 'ข้อมูล'])
         st.dataframe(df_metadata_table, hide_index=True, use_container_width=True)
 
-        # 4b. แสดงรายละเอียดรายข้อ
         st.markdown("---")
+        
+        ### 5. รายละเอียดการประเมินรายข้อ (แสดงเหมือนแบบฟอร์ม)
         st.header("5. รายละเอียดการประเมินรายข้อ")
-        st.dataframe(df_audit_result[['คำถาม', 'Scoring Category', 'Score', 'หมายเหตุ']])
+        
+        # แสดงเฉพาะคอลัมน์ที่จำเป็น (หัวข้อ, คำถาม, OK, PRN, NRIC, หมายเหตุ)
+        st.dataframe(
+            df_audit_result[['หัวข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']],
+            hide_index=True,
+            use_container_width=True
+        )
 
-        # 5. Save to Google Sheet Button
         st.markdown("---")
+        
+        ### 6. บันทึกผลสรุป
         st.header("6. บันทึกผลสรุป")
         
         if st.button("บันทึกผลสรุปทั้งหมดไปยัง Google Sheet"):
@@ -264,7 +282,7 @@ if uploaded_file is not None:
             else:
                 st.error(message)
 
-        # 6. Download Processed Data (Optional)
+        # 7. Download Processed Data (Optional)
         st.download_button(
             label="⬇️ ดาวน์โหลดผลการประเมินทั้งหมด (CSV)",
             data=df_audit_result.to_csv(index=False).encode('utf-8'),
