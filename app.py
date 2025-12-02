@@ -3,8 +3,8 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import gspread 
-import io 
+import gspread
+import io
 
 # --- 1. Global Configuration ---
 # Google Sheet ID ที่ดึงมาจาก URL
@@ -14,10 +14,10 @@ WORKSHEET_NAME = "FactoryAudit"
 
 # กำหนดเกณฑ์คะแนน
 SCORE_MAPPING = {
-    'OK': 3,    
-    'PRN': 2,   
-    'NRIC': 1,  
-    'Blank': 0 
+    'OK': 3,
+    'PRN': 2,
+    'NRIC': 1,
+    'Blank': 0
 }
 
 def get_grade_and_description(percentage):
@@ -37,12 +37,12 @@ def process_checklist_data(uploaded_file):
     # 1. Loading Metadata (โค้ดส่วนนี้ยังคงเดิม)
     try:
         uploaded_file.seek(0)
-        
+
         if uploaded_file.name.endswith('.xlsx'):
             df_metadata = pd.read_excel(uploaded_file, nrows=8, header=None)
         else:
             df_metadata = pd.read_csv(uploaded_file, nrows=8, header=None)
-        
+
         metadata = {
             'Date_of_Audit': df_metadata.iloc[2, 1],
             'Time_Shift': df_metadata.iloc[2, 4],
@@ -57,18 +57,18 @@ def process_checklist_data(uploaded_file):
     except Exception as e:
         st.warning(f"ไม่สามารถดึงข้อมูล Metadata จากส่วนหัวของไฟล์ได้: {e}. ใช้ค่าว่างแทน")
         metadata = {
-            'Date_of_Audit': 'N/A', 'Time_Shift': 'N/A', 'Factory': 'N/A', 'Work_Area': 'N/A', 
-            'Observed_Personnel': 'N/A', 'Supervisor': 'N/A', 'Machine_ID': 'N/A', 
+            'Date_of_Audit': 'N/A', 'Time_Shift': 'N/A', 'Factory': 'N/A', 'Work_Area': 'N/A',
+            'Observed_Personnel': 'N/A', 'Supervisor': 'N/A', 'Machine_ID': 'N/A',
             'Auditor': 'N/A', 'File_Name': uploaded_file.name
         }
 
 
     # 2. Loading Audit Questions (โค้ดส่วนนี้ยังคงเดิม)
     try:
-        uploaded_file.seek(0) 
-        
+        uploaded_file.seek(0)
+
         col_indices = [1, 4, 5, 6, 7, 8] # Index คอลัมน์ที่ต้องการ
-        
+
         if uploaded_file.name.endswith('.xlsx'):
             df_audit = pd.read_excel(
                 uploaded_file, header=13,
@@ -79,11 +79,11 @@ def process_checklist_data(uploaded_file):
                 uploaded_file, header=13,
                 usecols=col_indices
             )
-        
+
         df_audit.columns = ['หัวข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']
-            
+
         df_audit = df_audit.dropna(subset=['คำถาม']).reset_index(drop=True)
-        
+
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการอ่านไฟล์หรือโครงสร้างคอลัมน์ไม่ถูกต้อง: {e}")
         st.info("โปรดตรวจสอบว่าไฟล์ที่อัปโหลดมีโครงสร้างคอลัมน์ตามที่กำหนด")
@@ -107,30 +107,30 @@ def process_checklist_data(uploaded_file):
 
     # 4. Summary and Group Scoring (โค้ดส่วนนี้ยังคงเดิม)
     df_audited_q = df_audit[df_audit['Score'] > 0]
-    total_possible_questions = len(df_audited_q) 
-    total_possible_score = total_possible_questions * SCORE_MAPPING['OK'] 
+    total_possible_questions = len(df_audited_q)
+    total_possible_score = total_possible_questions * SCORE_MAPPING['OK']
     actual_score = df_audited_q['Score'].sum()
 
     percentage = (actual_score / total_possible_score) * 100 if total_possible_score > 0 else 0
     grade, grade_level, description = get_grade_and_description(percentage)
 
-    # คำนวณคะแนนรายหมวดหมู่ (Group Scores) 
+    # คำนวณคะแนนรายหมวดหมู่ (Group Scores)
     group_scores = {}
     if 'หัวข้อ' in df_audited_q.columns:
         for group, group_df in df_audited_q.groupby('หัวข้อ'):
             group_name = group.split('.', 1)[-1].strip().replace(' ', '_').replace('/', '_')
             group_score = group_df['Score'].sum()
             max_group_score = len(group_df) * SCORE_MAPPING['OK']
-            
+
             # สร้าง 2 คอลัมน์ต่อ 1 หมวดหมู่: Score_หมวดหมู่_Actual และ Score_หมวดหมู่_Max
             group_scores[f'Score_{group_name}_Actual'] = group_score
             group_scores[f'Score_{group_name}_Max'] = max_group_score
-    
+
     # รวม Metadata, Summary และ Group Scores เข้าด้วยกัน
     summary_data = {
         'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        **metadata, 
-        
+        **metadata,
+
         # คะแนนรวม
         'Total_Questions_Audited': total_possible_questions,
         'Actual_Score': actual_score,
@@ -139,9 +139,9 @@ def process_checklist_data(uploaded_file):
         'Grade': grade,
         'Grade_Level': grade_level,
         'Description': description,
-        
+
         # คะแนนรายหมวดหมู่ (Group Scores)
-        **group_scores 
+        **group_scores
     }
 
     return df_audit, summary_data, df_audited_q
@@ -151,9 +151,9 @@ def save_to_google_sheet(summary_data):
     """บันทึกข้อมูลสรุปไปยัง Google Sheet ที่ระบุ"""
     try:
         gc = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
-        
+
         spreadsheet = gc.open_by_key(GOOGLE_SHEET_ID)
-        worksheet = spreadsheet.worksheet(WORKSHEET_NAME) 
+        worksheet = spreadsheet.worksheet(WORKSHEET_NAME)
 
         headers = list(summary_data.keys())
         values = list(summary_data.values())
@@ -193,32 +193,54 @@ if uploaded_file is not None:
     if df_audit_result is not None:
         st.markdown("---")
         st.header("2. ผลการประเมินคะแนนรวม")
-        
+
         # แสดงผลสรุปคะแนนรวม (Metric Boxes)
         col1, col2, col3 = st.columns(3)
         col1.metric("คะแนนที่ทำได้", f"{summary['Actual_Score']}", f"จาก {summary['Max_Possible_Score']} คะแนน")
-        col2.metric("เปอร์เซ็นต์รวม", f"{summary['Score_Percentage_pct']}%")
+        col2.metric("เปอร์เซ็นต์รวม", f"{summary['Score_Percentage_pct']}%"
+        )
         col3.metric("เกรดรวม", f"{summary['Grade']} ({summary['Grade_Level']})")
 
         st.info(f"**คำอธิบายผลการประเมิน:** {summary['Description']}")
-        
-        st.markdown("---")
-        
-        ### 3. ตารางสรุปคะแนน 7 ด้าน (New Feature)
+
+        st.markdown("--- ")
+
+                ### 3. รายละเอียดการประเมินรายข้อและ Metadata
+
+        # 3a. แสดง Metadata ส่วนหัว
+        st.subheader("ข้อมูลเบื้องต้น (ฺGeneral Information)")
+        # จัด Metadata ในรูปแบบตาราง 2 คอลัมน์เพื่อให้ดูง่ายขึ้น
+        metadata_display = {
+            'Date of Audit': summary.get('Date_of_Audit'),
+            'Time/Shift': summary.get('Time_Shift'),
+            'Factory': summary.get('Factory'),
+            'Work Area': summary.get('Work_Area'),
+            'Machine ID': summary.get('Machine_ID'),
+            'Auditor': summary.get('Auditor'),
+            'Observed Personnel': summary.get('Observed_Personnel'),
+            'Supervisor': summary.get('Supervisor')
+        }
+        st.json(metadata_display) # ใช้ json เพื่อแสดงโครงสร้าง
+
+        # Add a section to display the raw audit questions data
+        st.subheader("Raw Audit Questions Data")
+        st.dataframe(df_audit_result, use_container_width=True)
+
+        ### 4. ตารางสรุปคะแนน 7 ด้าน (New Feature)
         st.header("3. สรุปคะแนนตามด้านการตรวจสอบ (7 Categories)")
-        
-        # 3a. สร้าง DataFrame สำหรับแสดงผล
+
+        # 4a. สร้าง DataFrame สำหรับแสดงผล
         group_summary_data = []
         for key, value in summary.items():
             if key.startswith('Score_') and key.endswith('_Actual'):
                 category_name = key.replace('Score_', '').replace('_Actual', '').replace('_', ' ')
                 max_key = key.replace('_Actual', '_Max')
-                
+
                 actual = value
                 max_score = summary.get(max_key, 0)
-                
+
                 percentage = (actual / max_score) * 100 if max_score > 0 else 0
-                
+
                 group_summary_data.append({
                     'ด้านที่ตรวจสอบ (Category)': category_name.title(),
                     'คะแนนที่ได้ (Actual)': actual,
@@ -232,41 +254,21 @@ if uploaded_file is not None:
             hide_index=True,
             use_container_width=True
         )
-        
-        st.markdown("---")
-        
-        ### 4. รายละเอียดการประเมินรายข้อและ Metadata
-        
-        # 4a. แสดง Metadata ส่วนหัว
-        st.subheader("ข้อมูลส่วนหัวของฟอร์ม (Metadata)")
-        # จัด Metadata ในรูปแบบตาราง 2 คอลัมน์เพื่อให้ดูง่ายขึ้น
-        metadata_display = {
-            'Date of Audit': summary.get('Date_of_Audit'),
-            'Time/Shift': summary.get('Time_Shift'),
-            'Factory': summary.get('Factory'),
-            'Work Area': summary.get('Work_Area'),
-            'Machine ID': summary.get('Machine_ID'),
-            'Auditor': summary.get('Auditor'),
-            'Observed Personnel': summary.get('Observed_Personnel'),
-            'Supervisor': summary.get('Supervisor'),
-        }
-        st.json(metadata_display) # ใช้ json เพื่อแสดงโครงสร้าง
 
-        # 4b. แสดงรายละเอียดรายข้อ
         st.markdown("---")
-        st.header("5. รายละเอียดการประเมินรายข้อ")
-        st.dataframe(df_audit_result[['คำถาม', 'Scoring Category', 'Score', 'หมายเหตุ']])
+
+
 
         # 5. Save to Google Sheet Button
         st.markdown("---")
         st.header("6. บันทึกผลสรุป")
-        
+
         if st.button("บันทึกผลสรุปทั้งหมดไปยัง Google Sheet"):
             success, message = save_to_google_sheet(summary)
             if success:
                 st.success(message)
                 st.write("ข้อมูลทั้งหมด (Metadata, คะแนนรวม, คะแนน 7 ด้าน) ได้ถูกบันทึกเป็น Header ใน Google Sheet เรียบร้อยแล้ว")
-                
+
             else:
                 st.error(message)
 
