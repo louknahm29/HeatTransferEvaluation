@@ -1,4 +1,4 @@
-# app.py (แก้ไขแล้ว)
+# app.py (โค้ดฉบับสมบูรณ์สำหรับ Deploy)
 
 import streamlit as st
 import pandas as pd
@@ -38,22 +38,20 @@ def process_checklist_data(uploaded_file):
     try:
         uploaded_file.seek(0)
         
-        # โหลด 8 แถวแรกเพื่อดึงข้อมูลบริบท (สมมติว่า metadata อยู่ใน 8 แถวแรก)
         if uploaded_file.name.endswith('.xlsx'):
             df_metadata = pd.read_excel(uploaded_file, nrows=8, header=None)
         else:
             df_metadata = pd.read_csv(uploaded_file, nrows=8, header=None)
         
-        # Mapping ข้อมูลจากตำแหน่งเซลล์ในไฟล์ 
         metadata = {
-            'Date_of_Audit': df_metadata.iloc[2, 1],      # Row 3, Col B
-            'Time_Shift': df_metadata.iloc[2, 4],         # Row 3, Col E
-            'Factory': df_metadata.iloc[3, 1],            # Row 4, Col B
-            'Work_Area': df_metadata.iloc[3, 4],          # Row 4, Col E
-            'Observed_Personnel': df_metadata.iloc[4, 1], # Row 5, Col B
-            'Supervisor': df_metadata.iloc[4, 4],         # Row 5, Col E
-            'Machine_ID': df_metadata.iloc[5, 1],         # Row 6, Col B
-            'Auditor': df_metadata.iloc[5, 4],            # Row 6, Col E
+            'Date_of_Audit': df_metadata.iloc[2, 1],
+            'Time_Shift': df_metadata.iloc[2, 4],
+            'Factory': df_metadata.iloc[3, 1],
+            'Work_Area': df_metadata.iloc[3, 4],
+            'Observed_Personnel': df_metadata.iloc[4, 1],
+            'Supervisor': df_metadata.iloc[4, 4],
+            'Machine_ID': df_metadata.iloc[5, 1],
+            'Auditor': df_metadata.iloc[5, 4],
             'File_Name': uploaded_file.name
         }
     except Exception as e:
@@ -65,12 +63,10 @@ def process_checklist_data(uploaded_file):
         }
 
 
-    # 2. Loading Audit Questions (*** แก้ไขส่วนนี้ ***)
+    # 2. Loading Audit Questions (*** ส่วนที่แก้ไขเพื่อให้โครงสร้างคอลัมน์ถูกต้อง ***)
     try:
         uploaded_file.seek(0) 
         
-        # ใช้ header=13 เพื่อให้แถวที่ 14 เป็นชื่อคอลัมน์หลัก 
-        # และใช้ usecols เป็น Index [1 (หัวข้อ), 4 (คำถาม), 5 (OK), 6 (PRN), 7 (NRIC), 8 (หมายเหตุ)]
         col_indices = [1, 4, 5, 6, 7, 8] # Index คอลัมน์ที่ต้องการ
         
         if uploaded_file.name.endswith('.xlsx'):
@@ -94,7 +90,7 @@ def process_checklist_data(uploaded_file):
         st.info("โปรดตรวจสอบว่าไฟล์ที่อัปโหลดมีโครงสร้างคอลัมน์ตามที่กำหนด")
         return None, None, None
 
-    # 3. Scoring: คำนวณคะแนนในแต่ละข้อ (โค้ดส่วนนี้ยังคงเดิม)
+    # 3. Scoring: คำนวณคะแนนในแต่ละข้อ
     df_audit['Score'] = 0
     df_audit['Scoring Category'] = 'Blank'
 
@@ -110,7 +106,7 @@ def process_checklist_data(uploaded_file):
             df_audit.loc[index, 'Scoring Category'] = 'NRIC'
 
 
-    # 4. Summary and Group Scoring (โค้ดส่วนนี้ยังคงเดิม)
+    # 4. Summary and Group Scoring (*** ส่วนที่แก้ไขโครงสร้างผลลัพธ์ ***)
     df_audited_q = df_audit[df_audit['Score'] > 0]
     total_possible_questions = len(df_audited_q) 
     total_possible_score = total_possible_questions * SCORE_MAPPING['OK'] 
@@ -119,33 +115,39 @@ def process_checklist_data(uploaded_file):
     percentage = (actual_score / total_possible_score) * 100 if total_possible_score > 0 else 0
     grade, grade_level, description = get_grade_and_description(percentage)
 
-    # คำนวณคะแนนรายหมวดหมู่ (สำหรับ Feature ใน ML)
+    # คำนวณคะแนนรายหมวดหมู่ (Group Scores) 
     group_scores = {}
     if 'หัวข้อ' in df_audited_q.columns:
         for group, group_df in df_audited_q.groupby('หัวข้อ'):
             group_name = group.split('.', 1)[-1].strip().replace(' ', '_').replace('/', '_')
             group_score = group_df['Score'].sum()
             max_group_score = len(group_df) * SCORE_MAPPING['OK']
-            group_scores[f'Score_{group_name}'] = f"{group_score}/{max_group_score}"
+            
+            # สร้าง 2 คอลัมน์ต่อ 1 หมวดหมู่: Score_หมวดหมู่_Actual และ Score_หมวดหมู่_Max
+            group_scores[f'Score_{group_name}_Actual'] = group_score
+            group_scores[f'Score_{group_name}_Max'] = max_group_score
     
     # รวม Metadata, Summary และ Group Scores เข้าด้วยกัน
     summary_data = {
         'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         **metadata, 
+        
+        # คะแนนรวม
         'Total_Questions_Audited': total_possible_questions,
-        'Max_Possible_Score': total_possible_score,
         'Actual_Score': actual_score,
+        'Max_Possible_Score': total_possible_score,
         'Score_Percentage_pct': round(percentage, 2),
         'Grade': grade,
         'Grade_Level': grade_level,
         'Description': description,
+        
+        # คะแนนรายหมวดหมู่ (Group Scores)
         **group_scores 
     }
 
     return df_audit, summary_data, df_audited_q
 
 # --- 3. Google Sheets Integration ---
-# ... (โค้ดส่วนนี้ไม่มีการแก้ไข) ...
 def save_to_google_sheet(summary_data):
     """บันทึกข้อมูลสรุปไปยัง Google Sheet ที่ระบุ"""
     try:
@@ -171,7 +173,6 @@ def save_to_google_sheet(summary_data):
         return False, f"❌ เกิดข้อผิดพลาดในการบันทึก Google Sheet: {e}"
 
 # --- 4. Streamlit UI (ส่วนติดต่อผู้ใช้) ---
-# ... (โค้ดส่วนนี้ไม่มีการแก้ไข) ...
 
 st.set_page_config(layout="wide", page_title="Heat Transfer Audit App")
 st.title("🔥 ระบบประเมิน Heat Transfer Process Audit")
