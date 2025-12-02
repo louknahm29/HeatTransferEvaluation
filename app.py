@@ -41,9 +41,9 @@ def process_checklist_data(uploaded_file):
         uploaded_file.seek(0)
         
         if uploaded_file.name.endswith('.xlsx'):
-            df_metadata = pd.read_excel(uploaded_file, nrows=8, header=None)
+            df_metadata = pd.read_excel(uploaded_file, nrows=15, header=None)
         else:
-            df_metadata = pd.read_csv(uploaded_file, nrows=8, header=None)
+            df_metadata = pd.read_csv(uploaded_file, nrows=15, header=None)
         
         # Mapping ข้อมูลจากตำแหน่งเซลล์ในไฟล์ (อิงตาม Value Column Index)
         metadata = {
@@ -222,7 +222,7 @@ if uploaded_file is not None:
             
             group_summary_data.append({
                 'Main Category': category_th,
-                'คะแนนที่ได้': f"{actual} / {max_score}",
+                'คะแนนที่ได้': f"{actual} / {3}",
                 'เปอร์เซ็นต์ (%)': f"{percentage:.2f}%",
                 'หมายเหตุ': ' ' # ช่องว่าง, หากต้องการให้แสดงข้อความสรุป remarks ต้องเพิ่มตรรกะรวบรวม remarks ใน process_checklist_data
             })
