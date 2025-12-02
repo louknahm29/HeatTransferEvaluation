@@ -1,9 +1,9 @@
-# app.py
+# app.py (แก้ไขแล้ว)
 
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import gspread # ไลบรารีสำหรับเชื่อมต่อ Google Sheets
+import gspread 
 import io 
 
 # --- 1. Global Configuration ---
@@ -44,8 +44,7 @@ def process_checklist_data(uploaded_file):
         else:
             df_metadata = pd.read_csv(uploaded_file, nrows=8, header=None)
         
-        # Mapping ข้อมูลจากตำแหน่งเซลล์ในไฟล์ (อ้างอิงจาก HT Process Control (TH).csv)
-        # ตรวจสอบ index ให้ตรงกับไฟล์ที่กรอกจริง (index เริ่มจาก 0)
+        # Mapping ข้อมูลจากตำแหน่งเซลล์ในไฟล์ 
         metadata = {
             'Date_of_Audit': df_metadata.iloc[2, 1],      # Row 3, Col B
             'Time_Shift': df_metadata.iloc[2, 4],         # Row 3, Col E
@@ -66,29 +65,36 @@ def process_checklist_data(uploaded_file):
         }
 
 
-    # 2. Loading Audit Questions 
+    # 2. Loading Audit Questions (*** แก้ไขส่วนนี้ ***)
     try:
         uploaded_file.seek(0) 
         
-        # ใช้ skiprows=13 เพื่อให้ Header เป็นแถวที่ 14 (Index 13)
+        # ใช้ header=13 เพื่อให้แถวที่ 14 เป็นชื่อคอลัมน์หลัก 
+        # และใช้ usecols เป็น Index [1 (หัวข้อ), 4 (คำถาม), 5 (OK), 6 (PRN), 7 (NRIC), 8 (หมายเหตุ)]
+        col_indices = [1, 4, 5, 6, 7, 8] # Index คอลัมน์ที่ต้องการ
+        
         if uploaded_file.name.endswith('.xlsx'):
             df_audit = pd.read_excel(
-                uploaded_file, skiprows=13,
-                usecols=['คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ', 'หัวข้อ']
+                uploaded_file, header=13,
+                usecols=col_indices
             )
         else:
             df_audit = pd.read_csv(
-                uploaded_file, skiprows=13,
-                usecols=['คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ', 'หัวข้อ']
+                uploaded_file, header=13,
+                usecols=col_indices
             )
+        
+        # กำหนดชื่อคอลัมน์ใหม่ตามลำดับ Index ที่เลือก
+        df_audit.columns = ['หัวข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']
             
         df_audit = df_audit.dropna(subset=['คำถาม']).reset_index(drop=True)
         
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการอ่านไฟล์หรือโครงสร้างคอลัมน์ไม่ถูกต้อง: {e}")
+        st.info("โปรดตรวจสอบว่าไฟล์ที่อัปโหลดมีโครงสร้างคอลัมน์ตามที่กำหนด")
         return None, None, None
 
-    # 3. Scoring: คำนวณคะแนนในแต่ละข้อ
+    # 3. Scoring: คำนวณคะแนนในแต่ละข้อ (โค้ดส่วนนี้ยังคงเดิม)
     df_audit['Score'] = 0
     df_audit['Scoring Category'] = 'Blank'
 
@@ -104,7 +110,7 @@ def process_checklist_data(uploaded_file):
             df_audit.loc[index, 'Scoring Category'] = 'NRIC'
 
 
-    # 4. Summary and Group Scoring (การคำนวณคะแนนรวมและคะแนนรายหมวดหมู่)
+    # 4. Summary and Group Scoring (โค้ดส่วนนี้ยังคงเดิม)
     df_audited_q = df_audit[df_audit['Score'] > 0]
     total_possible_questions = len(df_audited_q) 
     total_possible_score = total_possible_questions * SCORE_MAPPING['OK'] 
@@ -117,7 +123,6 @@ def process_checklist_data(uploaded_file):
     group_scores = {}
     if 'หัวข้อ' in df_audited_q.columns:
         for group, group_df in df_audited_q.groupby('หัวข้อ'):
-            # ทำความสะอาดชื่อหัวข้อเพื่อใช้เป็น Header
             group_name = group.split('.', 1)[-1].strip().replace(' ', '_').replace('/', '_')
             group_score = group_df['Score'].sum()
             max_group_score = len(group_df) * SCORE_MAPPING['OK']
@@ -140,21 +145,18 @@ def process_checklist_data(uploaded_file):
     return df_audit, summary_data, df_audited_q
 
 # --- 3. Google Sheets Integration ---
+# ... (โค้ดส่วนนี้ไม่มีการแก้ไข) ...
 def save_to_google_sheet(summary_data):
     """บันทึกข้อมูลสรุปไปยัง Google Sheet ที่ระบุ"""
     try:
-        # เชื่อมต่อ Service Account Key จาก secrets.toml
         gc = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
         
-        # เปิด Google Sheet ด้วย ID และ Worksheet Name ที่กำหนด
         spreadsheet = gc.open_by_key(GOOGLE_SHEET_ID)
         worksheet = spreadsheet.worksheet(WORKSHEET_NAME) 
 
-        # เตรียมข้อมูลสำหรับบันทึก
         headers = list(summary_data.keys())
         values = list(summary_data.values())
 
-        # ตรวจสอบ Header และบันทึก
         if worksheet.row_values(1) != headers:
             worksheet.append_row(headers)
 
@@ -169,6 +171,7 @@ def save_to_google_sheet(summary_data):
         return False, f"❌ เกิดข้อผิดพลาดในการบันทึก Google Sheet: {e}"
 
 # --- 4. Streamlit UI (ส่วนติดต่อผู้ใช้) ---
+# ... (โค้ดส่วนนี้ไม่มีการแก้ไข) ...
 
 st.set_page_config(layout="wide", page_title="Heat Transfer Audit App")
 st.title("🔥 ระบบประเมิน Heat Transfer Process Audit")
