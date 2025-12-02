@@ -44,7 +44,7 @@ def process_checklist_data(uploaded_file):
             df_metadata = pd.read_csv(uploaded_file, nrows=8, header=None)
         
         metadata = {
-            'Date_of_Audit': df_metadata.iloc[2, 1],
+            '': df_metadata.iloc[2, 1],
             'Time_Shift': df_metadata.iloc[2, 4],
             'Factory': df_metadata.iloc[3, 1],
             'Work_Area': df_metadata.iloc[3, 4],
