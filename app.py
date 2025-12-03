@@ -28,7 +28,6 @@ MAIN_CATEGORIES = [
     "1. บุคลากร", "2. เครื่องจักร", "3. วัสดุ", "4. วิธีการ", 
     "5. การวัด", "6. สภาพแวดล้อม", "7. Documentation & Control"
 ]
-# NOTE: โค้ดจะใช้ชื่อเหล่านี้ในการจัดกลุ่มและสร้าง Header ใน Google Sheet
 
 def get_grade_and_description(percentage):
     """กำหนดเกรดและคำอธิบายตามเปอร์เซ็นต์คะแนนรวม"""
@@ -48,7 +47,6 @@ def process_checklist_data(uploaded_file):
     try:
         uploaded_file.seek(0)
         
-        # ปรับ nrows เป็น 15 เพื่อดึงส่วนหัวทั้งหมด (Row 1-15)
         if uploaded_file.name.endswith('.xlsx'):
             df_metadata = pd.read_excel(uploaded_file, nrows=15, header=None)
         else:
@@ -122,14 +120,14 @@ def process_checklist_data(uploaded_file):
     group_scores_detailed = {}
     if 'หัวข้อ' in df_audited_q.columns:
         for group, group_df in df_audited_q.groupby('หัวข้อ'):
-            group_name = group.split('.', 1)[-1].strip().replace(' ', '_').replace('/', '_')
+            # NOTE: ใช้ group_name ที่ไม่มีเลขนำหน้าสำหรับคีย์ใน Dictionary
+            group_name = group.split('.', 1)[-1].strip().replace(' ', '_').replace('/', '_').replace('&', '').strip() 
             group_score = group_df['Score'].sum()
             max_group_score = len(group_df) * SCORE_MAPPING['OK']
             
             group_remarks_list = group_df['หมายเหตุ'].dropna().tolist()
             group_remarks_text = "; ".join(group_remarks_list)
             
-            # เก็บข้อมูลเชิงลึก
             group_scores_detailed[f'Score_{group_name}'] = f"{group_score}/{max_group_score}"
             group_scores_detailed[f'Score_{group_name}_Actual'] = group_score
             group_scores_detailed[f'Score_{group_name}_Max'] = max_group_score
@@ -138,7 +136,6 @@ def process_checklist_data(uploaded_file):
     
     # 4b. จัดเรียงข้อมูลตามลำดับที่ผู้ใช้ต้องการ (Final Header Structure)
     final_summary = {
-        # 1. System Info / Metadata (ตามลำดับที่ต้องการ)
         'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         'Date_of_Audit': metadata_raw['Date_of_Audit'],
         'Time_Shift': metadata_raw['Time_Shift'],
@@ -150,7 +147,6 @@ def process_checklist_data(uploaded_file):
         'Auditor': metadata_raw['Auditor'],
         'File_Name': metadata_raw['File_Name'],
         
-        # 2. Overall Summary
         'Actual_Score': actual_score,
         'Score_Percentage_pct': round(percentage, 2),
         'Grade': grade,
@@ -176,7 +172,7 @@ def process_checklist_data(uploaded_file):
 
     return df_audit, final_summary, df_audited_q
 
-# --- 3. GOOGLE SHEETS & DRIVE INTEGRATION (ฟังก์ชันรวม) ---
+# --- 3. GOOGLE SHEETS & DRIVE INTEGRATION ---
 
 def upload_file_to_drive(uploaded_file, folder_id):
     """ฟังก์ชันอัปโหลดไฟล์ไปยัง Google Drive โดยใช้ Service Account"""
@@ -276,7 +272,8 @@ if uploaded_file is not None:
         
         group_summary_data = []
         for category_th in MAIN_CATEGORIES:
-            key_name = category_th.split('.', 1)[-1].strip().replace(' ', '_').replace('&', '').strip()
+            # NOTE: ใช้วิธีดึงชื่อหมวดหมู่ที่ไม่มีเลขนำหน้าสำหรับคีย์ใน Dictionary
+            key_name = category_th.split('.', 1)[-1].strip().replace(' ', '_').replace('&', '').strip() 
             
             actual = summary.get(f'Score_{key_name}_Actual', 0)
             max_score = summary.get(f'Score_{key_name}_Max', 0)
