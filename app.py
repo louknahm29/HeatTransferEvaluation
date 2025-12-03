@@ -29,11 +29,11 @@ MAIN_CATEGORIES = [
     "5. การวัด", "6. สภาพแวดล้อม", "7. Documentation & Control"
 ]
 
-# ⚠️ NEW: Mapping Category ID (1, 2, 3...) to Full Name
+# ⚠️ NEW: Mapping Category ID (1, 2, 3...) to Full Name (ใช้ชื่อย่อภาษาอังกฤษสำหรับ Key)
 CATEGORY_ID_MAP = {
-    '1': "1. บุคลากร", '2': "2. เครื่องจักร", '3': "3. วัสดุ", 
-    '4': "4. วิธีการ", '5': "5. การวัด", '6': "6. สภาพแวดล้อม", 
-    '7': "7. Documentation & Control"
+    '1': "1. People (บุคลากร)", '2': "2. Machine (เครื่องจักร)", '3': "3. Materials (วัสดุ)", 
+    '4': "4. Method (วิธีการ)", '5': "5. Measurement (การวัด)", '6': "6. Environment (สภาพแวดล้อม)", 
+    '7': "7. Documentation & Control (เอกสารและการควบคุม)"
 }
 
 
@@ -106,7 +106,6 @@ def process_checklist_data(uploaded_file):
     df_audit['Scoring Category'] = 'Blank'
 
     for index, row in df_audit.iterrows():
-        # NOTE: การให้คะแนนใช้ค่าตัวเลข (3, 2, 1) แม้ว่าชื่อ Header จะเป็น 'OK (3)'
         if pd.notna(row['OK']) and row['OK'] != "":
             df_audit.loc[index, 'Score'] = SCORE_MAPPING['OK']
             df_audit.loc[index, 'Scoring Category'] = 'OK'
@@ -138,10 +137,11 @@ def process_checklist_data(uploaded_file):
             group_score = group_df['Score'].sum()
             max_group_score = len(group_df) * SCORE_MAPPING['OK']
             
-            # ⚠️ CHANGE: ใช้ "/" คั่นระหว่างหมายเหตุ (แทนที่ "; ")
+            # ⚠️ NEW: ใช้ "/" คั่นระหว่างหมายเหตุ
             group_remarks_list = group_df['หมายเหตุ'].dropna().tolist()
             group_remarks_text = " / ".join(group_remarks_list)
             
+            # เก็บข้อมูลเชิงลึก
             group_scores_detailed[f'Score_{group_name}'] = f"{group_score}/{max_group_score}"
             group_scores_detailed[f'Score_{group_name}_Actual'] = group_score
             group_scores_detailed[f'Score_{group_name}_Max'] = max_group_score
