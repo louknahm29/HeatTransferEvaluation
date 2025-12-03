@@ -48,13 +48,13 @@ def process_checklist_data(uploaded_file):
         # Mapping ข้อมูลจากตำแหน่งเซลล์ในไฟล์ (อิงตาม Value Column Index)
         metadata = {
             'Date_of_Audit': df_metadata.iloc[4, 2],
-            'Time_Shift': df_metadata.iloc[4, 4],
+            'Time_Shift': df_metadata.iloc[4, 5],
             'Factory': df_metadata.iloc[5, 2],
-            'Work_Area': df_metadata.iloc[5, 4],
+            'Work_Area': df_metadata.iloc[5, 5],
             'Observed_Personnel': df_metadata.iloc[6, 2],
-            'Supervisor': df_metadata.iloc[6, 4],
+            'Supervisor': df_metadata.iloc[6, 5],
             'Machine_ID': df_metadata.iloc[7, 2],
-            'Auditor': df_metadata.iloc[7, 4],
+            'Auditor': df_metadata.iloc[7, 5],
             'File_Name': uploaded_file.name
         }
     except Exception as e:
