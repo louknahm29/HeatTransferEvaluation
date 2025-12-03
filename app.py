@@ -91,19 +91,15 @@ def process_checklist_data(uploaded_file):
         else:
             df_audit = pd.read_csv(uploaded_file, header=13, usecols=col_indices)
         
-        # กำหนดชื่อคอลัมน์ใหม่ตามลำดับ Index ที่เลือก
         df_audit.columns = ['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']
             
-        # ⚠️ NEW: Clean up and extract Category ID (ใช้เลขข้อเป็นเกณฑ์)
+        # ⚠️ FIX: ใช้ ffill เพื่อเติมเต็มคอลัมน์ 'หัวข้อ' ก่อนการประมวลผล
+        df_audit['หัวข้อ'] = df_audit['หัวข้อ'].ffill() 
+        
+        # ⚠️ Clean up and extract Category ID (ใช้เลขข้อเป็นเกณฑ์)
         df_audit = df_audit.dropna(subset=['คำถาม']).copy() 
         df_audit['Category_ID'] = df_audit['เลขข้อ'].astype(str).str.split('.', expand=True)[0]
-        # กรองเฉพาะแถวที่มี ID ตรงกับ Main Categories
         df_audit = df_audit[df_audit['Category_ID'].isin(CATEGORY_ID_MAP.keys())].reset_index(drop=True)
-        
-        # ⚠️ FIX: ใช้ ffill เพื่อเติมเต็มคอลัมน์ 'หัวข้อ' (สำหรับ UI และ Grouping)
-        # NOTE: การใช้ ffill ตรงนี้เป็นการเตรียมข้อมูลสำหรับ UI และ Google Sheets Grouping
-        df_audit['หัวข้อ'] = df_audit['หัวข้อ'].ffill() 
-
         
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการอ่านไฟล์หรือโครงสร้างคอลัมน์ไม่ถูกต้อง: {e}")
@@ -136,7 +132,6 @@ def process_checklist_data(uploaded_file):
     # 4a. คำนวณคะแนนและ Remarks รายหมวดหมู่
     group_scores_detailed = {}
     
-    # ⚠️ Grouping ด้วย Category_ID แทน 'หัวข้อ'
     if 'Category_ID' in df_audited_q.columns:
         for category_id, group_df in df_audited_q.groupby('Category_ID'):
             
@@ -149,7 +144,6 @@ def process_checklist_data(uploaded_file):
             group_remarks_list = group_df['หมายเหตุ'].dropna().tolist()
             group_remarks_text = " / ".join(group_remarks_list)
             
-            # เก็บข้อมูลเชิงลึก
             group_scores_detailed[f'Score_{group_name}'] = f"{group_score}/{max_group_score}"
             group_scores_detailed[f'Score_{group_name}_Actual'] = group_score
             group_scores_detailed[f'Score_{group_name}_Max'] = max_group_score
@@ -346,7 +340,6 @@ if uploaded_file is not None:
         df_display = df_audit_result[['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']].copy()
         
         # 5a. ล้างค่าในคอลัมน์ 'หัวข้อ' ออก เพื่อให้แสดงเพียงครั้งเดียว
-        # โค้ดนี้จะใช้ชื่อเต็มของหมวดหมู่ (e.g., 1. People (บุคลากร)) ในแถวแรกของกลุ่ม
         df_display['หัวข้อ'] = df_display['หัวข้อ'].mask(df_display['หัวข้อ'].duplicated(), '')
         
         # 5b. ทำความสะอาดค่าว่าง/None ในคอลัมน์คะแนน/หมายเหตุ 
