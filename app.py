@@ -25,15 +25,15 @@ SCORE_MAPPING = {
 
 # ⚠️ กำหนด Main Categories ตามชื่อเต็มที่ใช้ในการจัดกลุ่ม ⚠️
 MAIN_CATEGORIES = [
-    "1. บุคลากร", "2. เครื่องจักร", "3. วัสดุ", "4. วิธีการ", 
-    "5. การวัด", "6. สภาพแวดล้อม", "7. Documentation & Control"
+    "1. People (บุคลากร)", "2. Machine (เครื่องจักร)", "3. Materials (วัสดุ)", "4. Method (วิธีการ)", 
+    "5. Measurement (การวัด)", "6. Environment (สภาพแวดล้อม)", "7. Documentation & Control (เอกสารและการควบคุม)"
 ]
 
 # ⚠️ NEW: Mapping Category ID (1, 2, 3...) to Full Name
 CATEGORY_ID_MAP = {
-    '1': "1. บุคลากร", '2': "2. เครื่องจักร", '3': "3. วัสดุ", 
-    '4': "4. วิธีการ", '5': "5. การวัด", '6': "6. สภาพแวดล้อม", 
-    '7': "7. Documentation & Control"
+    '1': "1. People (บุคลากร)", '2': "2. Machine (เครื่องจักร)", '3': "3. Materials (วัสดุ)", 
+    '4': "4. Method (วิธีการ)", '5': "5. Measurement (การวัด)", '6': "6. Environment (สภาพแวดล้อม)", 
+    '7': "7. Documentation & Control (เอกสารและการควบคุม)"
 }
 
 
@@ -91,10 +91,8 @@ def process_checklist_data(uploaded_file):
         else:
             df_audit = pd.read_csv(uploaded_file, header=13, usecols=col_indices)
         
-        # กำหนดชื่อคอลัมน์ภายในที่สั้น
         df_audit.columns = ['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']
             
-        # ⚠️ NEW: Clean up and extract Category ID (ใช้เลขข้อเป็นเกณฑ์)
         df_audit = df_audit.dropna(subset=['คำถาม']).copy() 
         df_audit['Category_ID'] = df_audit['เลขข้อ'].astype(str).str.split('.', expand=True)[0]
         df_audit = df_audit[df_audit['Category_ID'].isin(CATEGORY_ID_MAP.keys())].reset_index(drop=True)
@@ -146,7 +144,6 @@ def process_checklist_data(uploaded_file):
             group_remarks_list = group_df['หมายเหตุ'].dropna().tolist()
             group_remarks_text = " / ".join(group_remarks_list)
             
-            # เก็บข้อมูลเชิงลึก
             group_scores_detailed[f'Score_{group_name}'] = f"{group_score}/{max_group_score}"
             group_scores_detailed[f'Score_{group_name}_Actual'] = group_score
             group_scores_detailed[f'Score_{group_name}_Max'] = max_group_score
@@ -258,14 +255,14 @@ st.title("🔥 ระบบประเมิน Heat Transfer Process Audit")
 st.markdown("---")
 
 # 1. อัปโหลดไฟล์ Heat Transfer Checklist
-st.header("1. อัปโหลดไฟล์ Heat Transfer Checklist")
+st.header("1. Upload Heat Transfer Checklist File (อัปโหลดไฟล์ Heat Transfer Checklist)")
 uploaded_file = st.file_uploader(
     "อัปโหลดไฟล์ที่กรอกข้อมูลแล้ว (.xlsx หรือ .csv)",
     type=["xlsx", "csv"]
 )
 
 if uploaded_file is not None:
-    st.success(f"อัปโหลดไฟล์ **{uploaded_file.name}** สำเร็จ! เริ่มประมวลผล...")
+    st.success(f"Upload successful: **{uploaded_file.name}** (อัปโหลดไฟล์สำเร็จ)")
 
     # 2. Processing
     df_audit_result, summary, df_audited_q = process_checklist_data(uploaded_file)
@@ -273,7 +270,7 @@ if uploaded_file is not None:
     if df_audit_result is not None:
         st.markdown("---")
         # 2. ผลการประเมินคะแนนรวม
-        st.header("2. ผลการประเมินคะแนนรวม")
+        st.header("2. Overall Score Evaluation (ผลการประเมินคะแนนรวม)")
         
         col1, col2, col3 = st.columns(3)
         col1.metric("Actual Score (คะแนนที่ทำได้)", f"{summary['Actual_Score']}", f"จาก {summary['Max_Possible_Score']} คะแนน")
@@ -298,7 +295,7 @@ if uploaded_file is not None:
             percentage = (actual / max_score) * 100 if max_score > 0 else 0
             
             group_summary_data.append({
-                'Main Category': category_th,
+                'Main Category (ด้าน)': category_th,
                 'คะแนนที่ได้ (Actual)': actual, 
                 'คะแนนเต็ม (Max)': max_score,
                 'เปอร์เซ็นต์ (%)': f"{percentage:.2f}%", 
@@ -321,7 +318,7 @@ if uploaded_file is not None:
         # จัด Metadata ในรูปแบบตาราง 2 คอลัมน์
         metadata_map = {
             'Date of Audit (วันที่ตรวจสอบ)': summary.get('Date_of_Audit'),
-            'Time of (Audit) เวลา/รอบการทำงาน': summary.get('Time_Shift'),
+            'Time of Audit (เวลา/รอบการทำงาน)': summary.get('Time_Shift'),
             'Factory (โรงงาน)': summary.get('Factory'),
             'Work Area (พื้นที่ตรวจสอบ)': summary.get('Work_Area'),
             'Machine ID (หมายเลขเครื่องจักร)': summary.get('Machine_ID'),
@@ -331,7 +328,7 @@ if uploaded_file is not None:
             'File Name (ชื่อไฟล์ที่อัปโหลด)': summary.get('File_Name'),
         }
         
-        df_metadata_table = pd.DataFrame(metadata_map.items(), columns=['หัวข้อ', 'ข้อมูล'])
+        df_metadata_table = pd.DataFrame(metadata_map.items(), columns=['Header (หัวข้อ)', 'Data (ข้อมูล)'])
         st.dataframe(df_metadata_table, hide_index=True, use_container_width=True)
 
         st.markdown("---")
@@ -349,9 +346,21 @@ if uploaded_file is not None:
         cols_to_clean = ['OK', 'PRN', 'NRIC', 'หมายเหตุ']
         df_display[cols_to_clean] = df_display[cols_to_clean].fillna('')
 
+        # 5c. กำหนดชื่อคอลัมน์ภาษาไทย/อังกฤษสำหรับการแสดงผล
+        DISPLAY_COLUMNS_MAP = {
+            'หัวข้อ': 'Category (หัวข้อหลัก)',
+            'เลขข้อ': 'No. (ข้อที่)',
+            'คำถาม': 'Question (คำถาม)',
+            'OK': 'OK (3)',
+            'PRN': 'PRN (2)',
+            'NRIC': 'NRIC (1)',
+            'หมายเหตุ': 'Remark (หมายเหตุ)'
+        }
+        df_display = df_display.rename(columns=DISPLAY_COLUMNS_MAP)
+        
         st.dataframe(
             df_display,
-            column_order=['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ'],
+            column_order=list(DISPLAY_COLUMNS_MAP.values()),
             hide_index=True,
             use_container_width=True
         )
@@ -373,10 +382,10 @@ if uploaded_file is not None:
 
         # 7. Download Processed Data (Optional)
         st.download_button(
-            label="⬇️ ดาวน์โหลดผลการประเมินทั้งหมด (CSV)",
+            label="⬇️ Download All Processed Data (CSV)",
             data=df_audit_result.to_csv(index=False).encode('utf-8'),
             file_name=f"audit_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv"
         )
 else:
-    st.info("กรุณาอัปโหลดไฟล์ Excel/CSV ที่กรอกข้อมูลแล้ว เพื่อเริ่มต้นการประเมิน")
+    st.info("Please upload the filled-out Excel/CSV file to begin evaluation (กรุณาอัปโหลดไฟล์ Excel/CSV ที่กรอกข้อมูลแล้ว เพื่อเริ่มต้นการประเมิน)")
