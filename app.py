@@ -13,7 +13,8 @@ from googleapiclient.discovery import build
 # --- 1. Global Configuration ---
 # Google Sheet ID และ Worksheet Name
 GOOGLE_SHEET_ID = "1E6WpIgmUBZ2bPpBxSW08ktKUKJGahmzqjVcMDfsqMec"
-WORKSHEET_NAME = "FactoryAudit"
+WORKSHEET_NAME_SUMMARY = "FactoryAudit_Summary" # ชีทสำหรับข้อมูลสรุป
+WORKSHEET_NAME_ITEMIZED = "FactoryAudit_Details" # ชีทสำหรับข้อมูลรายข้อ
 
 # Google Drive Folder ID สำหรับเก็บไฟล์ที่อัปโหลด
 GDRIVE_FOLDER_ID = "1lpKmazYDw907m-2sGF-MfRisNMd3lkzg"
@@ -260,6 +261,7 @@ def save_itemized_data(df_itemized, summary_metadata, worksheet_name):
             df_save.insert(0, col, val)
         
         # 4. กำหนด Header (ชื่อคอลัมน์) ที่ต้องการใน Google Sheet
+        # ใช้ชื่อสั้นและชื่อที่คำนวณได้สำหรับ Header
         final_headers = list(metadata_cols.keys()) + [
             'Category', 'Item_No', 'Question', 'OK_Mark', 'PRN_Mark', 'NRIC_Mark', 'Remark', 'Score_Value'
         ]
@@ -285,7 +287,6 @@ def save_itemized_data(df_itemized, summary_metadata, worksheet_name):
     except Exception as e:
         return False, f"❌ Error Itemized Save: {e}"
 
-
 def automate_storage_and_save(summary_data, df_audit_result, uploaded_file):
     """จัดการการจัดเก็บไฟล์ (Drive), บันทึกข้อมูลสรุป (Summary) และบันทึกข้อมูลย่อย (Details)"""
     
@@ -293,17 +294,17 @@ def automate_storage_and_save(summary_data, df_audit_result, uploaded_file):
     drive_success, drive_message = upload_file_to_drive(uploaded_file, GDRIVE_FOLDER_ID)
     
     if not drive_success:
-        return False, drive_message # ถ้าอัปโหลดไฟล์ล้มเหลว ให้คืนค่าข้อผิดพลาดทันที
+        return False, drive_message
 
     # 2. บันทึกข้อมูลสรุป (Summary)
-    summary_success, summary_message = save_to_google_sheet(summary_data, 'FactoryAudit_Summary') # ใช้ชื่อใหม่
+    summary_success, summary_message = save_to_google_sheet(summary_data, WORKSHEET_NAME_SUMMARY)
     
     if not summary_success:
         return False, f"{drive_message}. {summary_message}"
 
     # 3. บันทึกข้อมูลรายข้อย่อย (Itemized Details)
     # NOTE: เราใช้ df_audit_result ที่ผ่านการประมวลผลแล้ว
-    itemized_success, itemized_message = save_itemized_data(df_audit_result, summary_data, 'FactoryAudit_Details') # ใช้ชื่อใหม่
+    itemized_success, itemized_message = save_itemized_data(df_audit_result, summary_data, WORKSHEET_NAME_ITEMIZED)
 
     if not itemized_success:
         return False, f"{drive_message}. {summary_message}. {itemized_message}"
