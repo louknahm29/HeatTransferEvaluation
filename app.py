@@ -31,9 +31,9 @@ MAIN_CATEGORIES = [
 
 # ⚠️ NEW: Mapping Category ID (1, 2, 3...) to Full Name
 CATEGORY_ID_MAP = {
-    '1': "1. People (บุคลากร)", '2': "2. Machine (เครื่องจักร)", '3': "3. Materials (วัสดุ)", 
-    '4': "4. Method (วิธีการ)", '5': "5. Measurement (การวัด)", '6': "6. Environment (สภาพแวดล้อม)", 
-    '7': "7. Documentation & Control (เอกสารและการควบคุม)"
+    '1': "1. บุคลากร", '2': "2. เครื่องจักร", '3': "3. วัสดุ", 
+    '4': "4. วิธีการ", '5': "5. การวัด", '6': "6. สภาพแวดล้อม", 
+    '7': "7. Documentation & Control"
 }
 
 
@@ -298,7 +298,7 @@ if uploaded_file is not None:
             
             group_summary_data.append({
                 'Main Category (ด้าน)': category_th.replace(' (', '\n('), # NEW: Multiline Category
-                'Actual Score (คะแนนที่ได้)': actual, 
+                'Actual Score (คะแนนที่ทำได้)': actual, 
                 'Total Score (คะแนนเต็ม)': max_score,
                 'Percentage (%)': f"{percentage:.2f}%", 
                 'Remark (หมายเหตุ)': remarks_text
