@@ -69,16 +69,16 @@ def process_checklist_data(uploaded_file):
     try:
         uploaded_file.seek(0) 
         
-        # Index คอลัมน์ที่ต้องการ: [1: หัวข้อ, 2: เลขข้อ, 3: คำถาม, 4: OK, 5: PRN, 6: NRIC, 7: หมายเหตุ]
-        col_indices = [1, 2, 3, 4, 5, 6, 7] 
+        # Index คอลัมน์ที่ต้องการ: [1: เลขข้อ, 2: คำถาม, 3: OK, 4: PRN, 5: NRIC, 6: หมายเหตุ]
+        col_indices = [1, 2, 3, 4, 5, 6] 
         
         if uploaded_file.name.endswith('.xlsx'):
-            df_audit = pd.read_excel(uploaded_file, header=13, usecols=col_indices)
+            df_audit = pd.read_excel(uploaded_file, header=15, usecols=col_indices)
         else:
-            df_audit = pd.read_csv(uploaded_file, header=13, usecols=col_indices)
+            df_audit = pd.read_csv(uploaded_file, header=15, usecols=col_indices)
         
         # กำหนดชื่อคอลัมน์ใหม่ตามลำดับ Index ที่เลือก
-        df_audit.columns = ['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']
+        df_audit.columns = ['เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']
             
         df_audit = df_audit.dropna(subset=['คำถาม']).reset_index(drop=True)
         
