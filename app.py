@@ -54,8 +54,6 @@ def process_checklist_data(uploaded_file):
             df_metadata = pd.read_csv(uploaded_file, nrows=15, header=None)
         
         # Mapping ข้อมูลจากตำแหน่งเซลล์ในไฟล์ (อิงตาม Value Column Index)
-        # Row Index: Row 4 (Index 3), Row 5 (Index 4), Row 6 (Index 5), Row 7 (Index 6)
-        # Col Index: Col C (Index 2), Col F (Index 5)
         metadata_raw = {
             'Date_of_Audit': df_metadata.iloc[3, 2],
             'Time_Shift': df_metadata.iloc[3, 5],
@@ -177,7 +175,7 @@ def process_checklist_data(uploaded_file):
 
     return df_audit, final_summary, df_audited_q
 
-# --- 3. GOOGLE SHEETS & DRIVE INTEGRATION (การปรับปรุง) ---
+# --- 3. GOOGLE SHEETS & DRIVE INTEGRATION (ฟังก์ชันรวม) ---
 
 def upload_file_to_drive(uploaded_file, folder_id):
     """ฟังก์ชันอัปโหลดไฟล์ไปยัง Google Drive โดยใช้ Service Account"""
