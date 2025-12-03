@@ -31,9 +31,9 @@ MAIN_CATEGORIES = [
 
 # ⚠️ NEW: Mapping Category ID (1, 2, 3...) to Full Name
 CATEGORY_ID_MAP = {
-    '1': "1. บุคลากร", '2': "2. เครื่องจักร", '3': "3. วัสดุ", 
-    '4': "4. วิธีการ", '5': "5. การวัด", '6': "6. สภาพแวดล้อม", 
-    '7': "7. Documentation & Control"
+    '1': "1. People (บุคลากร)", '2': "2. Machine (เครื่องจักร)", '3': "3. Materials (วัสดุ)", 
+    '4': "4. Method (วิธีการ)", '5': "5. Measurement (การวัด)", '6': "6. Environment (สภาพแวดล้อม)", 
+    '7': "7. Documentation & Control (เอกสารและการควบคุม)"
 }
 
 
@@ -144,6 +144,7 @@ def process_checklist_data(uploaded_file):
             group_remarks_list = group_df['หมายเหตุ'].dropna().tolist()
             group_remarks_text = " / ".join(group_remarks_list)
             
+            # เก็บข้อมูลเชิงลึก
             group_scores_detailed[f'Score_{group_name}'] = f"{group_score}/{max_group_score}"
             group_scores_detailed[f'Score_{group_name}_Actual'] = group_score
             group_scores_detailed[f'Score_{group_name}_Max'] = max_group_score
@@ -272,10 +273,11 @@ if uploaded_file is not None:
         # 2. ผลการประเมินคะแนนรวม
         st.header("2. Overall Score Evaluation (ผลการประเมินคะแนนรวม)")
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4) # Changed to 4 columns
         col1.metric("Actual Score (คะแนนที่ทำได้)", f"{summary['Actual_Score']}", f"จาก {summary['Max_Possible_Score']} คะแนน")
-        col2.metric("Percentage (เปอร์เซ็นต์รวม)", f"{summary['Score_Percentage_pct']}%")
-        col3.metric("Grade (เกรดรวม)", f"{summary['Grade']} ({summary['Grade_Level']})")
+        col2.metric("Total Score (คะแนนเต็ม)", f"{summary['Max_Possible_Score']}") # NEW: Total Score
+        col3.metric("Percentage (เปอร์เซ็นต์รวม)", f"{summary['Score_Percentage_pct']}%")
+        col4.metric("Grade (เกรดรวม)", f"{summary['Grade']} ({summary['Grade_Level']})")
 
         st.info(f"**Description (คำอธิบายผลการประเมิน):** {summary['Description']}")
         
@@ -295,7 +297,7 @@ if uploaded_file is not None:
             percentage = (actual / max_score) * 100 if max_score > 0 else 0
             
             group_summary_data.append({
-                'Main Category (ด้าน)': category_th.replace(' (', '\n('), # NEW: Multiline Category
+                'Main Category (ด้าน)': category_th.replace(' (', '\n('),
                 'Actual Score (คะแนนที่ได้)': actual, 
                 'Total Score (คะแนนเต็ม)': max_score,
                 'Percentage (%)': f"{percentage:.2f}%", 
@@ -358,7 +360,7 @@ if uploaded_file is not None:
         
         # 5a. สร้าง Map สำหรับคอลัมน์แสดงผล Multiline
         DISPLAY_COLUMNS_MAP = {
-            'หัวข้อ': 'Main Category\n(หัวข้อหลัก)',
+            'หัวข้อ': 'Category\n(หัวข้อหลัก)',
             'เลขข้อ': 'No.\n(ข้อที่)',
             'คำถาม': 'Question\n(คำถาม)',
             'OK': 'OK\n(3)',
@@ -370,14 +372,14 @@ if uploaded_file is not None:
         # เตรียม DataFrame สำหรับแสดงผล
         df_display = df_audit_result[['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']].copy()
         
-        # 5b. ทำความสะอาดค่าว่าง/None และ Masking
+        # 5b. ทำความสะอาดค่าว่าง/None ในคอลัมน์คะแนน/หมายเหตุ 
         cols_to_clean = ['OK', 'PRN', 'NRIC', 'หมายเหตุ']
         df_display[cols_to_clean] = df_display[cols_to_clean].fillna('')
 
-        # ล้างค่าในคอลัมน์ 'หัวข้อ' ออก เพื่อให้แสดงเพียงครั้งเดียว
+        # 5c. ล้างค่าในคอลัมน์ 'หัวข้อ' ออก เพื่อให้แสดงเพียงครั้งเดียว
         df_display['หัวข้อ'] = df_display['หัวข้อ'].mask(df_display['หัวข้อ'].duplicated(), '')
         
-        # 5c. เปลี่ยนชื่อคอลัมน์สำหรับแสดงผลในตาราง
+        # 5d. เปลี่ยนชื่อคอลัมน์สำหรับแสดงผลในตาราง
         df_display = df_display.rename(columns=DISPLAY_COLUMNS_MAP)
 
         st.dataframe(
