@@ -80,9 +80,9 @@ def process_checklist_data(uploaded_file):
         col_indices = [1, 2, 3, 4, 5, 6, 7] 
         
         if uploaded_file.name.endswith('.xlsx'):
-            df_audit = pd.read_excel(uploaded_file, header=13, usecols=col_indices)
+            df_audit = pd.read_excel(uploaded_file, header=15, usecols=col_indices)
         else:
-            df_audit = pd.read_csv(uploaded_file, header=13, usecols=col_indices)
+            df_audit = pd.read_csv(uploaded_file, header=15, usecols=col_indices)
         
         df_audit.columns = ['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']
             
