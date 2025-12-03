@@ -1,4 +1,4 @@
-# app.py (Final Version: รวม GDrive Upload และ GSheets Save)
+# app.py (โค้ดฉบับสมบูรณ์สำหรับ Deploy)
 
 import streamlit as st
 import pandas as pd
@@ -16,7 +16,6 @@ GOOGLE_SHEET_ID = "1E6WpIgmUBZ2bPpBxSW08ktKUKJGahmzqjVcMDfsqMec"
 WORKSHEET_NAME = "FactoryAudit"
 
 # Google Drive Folder ID สำหรับเก็บไฟล์ที่อัปโหลด
-# ID จากลิงก์: https://drive.google.com/drive/u/0/folders/1lpKmazYDw907m-2sGF-MfRisNMd3lkzg
 GDRIVE_FOLDER_ID = "1lpKmazYDw907m-2sGF-MfRisNMd3lkzg"
 
 # กำหนดเกณฑ์คะแนน
@@ -24,7 +23,7 @@ SCORE_MAPPING = {
     'OK': 3, 'PRN': 2, 'NRIC': 1, 'Blank': 0 
 }
 
-# กำหนด Main Categories
+# กำหนด Main Categories 
 MAIN_CATEGORIES = [
     "บุคลากร", "เครื่องจักร", "วัสดุ", "วิธีการ", 
     "การวัด", "สภาพแวดล้อม", "Documentation & Control"
@@ -44,16 +43,19 @@ def get_grade_and_description(percentage):
 def process_checklist_data(uploaded_file):
     """ทำความสะอาดข้อมูล, คำนวณคะแนน, และสรุปผลจากไฟล์ที่อัปโหลด"""
 
-    # 1. Loading Metadata 
+    # 1. Loading Metadata (โหลดข้อมูลบริบทจากส่วนหัว)
     try:
         uploaded_file.seek(0)
         
+        # ปรับ nrows เป็น 15 เพื่อดึงส่วนหัวทั้งหมด (Row 1-15)
         if uploaded_file.name.endswith('.xlsx'):
             df_metadata = pd.read_excel(uploaded_file, nrows=15, header=None)
         else:
             df_metadata = pd.read_csv(uploaded_file, nrows=15, header=None)
         
         # Mapping ข้อมูลจากตำแหน่งเซลล์ในไฟล์ (อิงตาม Value Column Index)
+        # Row Index: Row 4 (Index 3), Row 5 (Index 4), Row 6 (Index 5), Row 7 (Index 6)
+        # Col Index: Col C (Index 2), Col F (Index 5)
         metadata_raw = {
             'Date_of_Audit': df_metadata.iloc[3, 2],
             'Time_Shift': df_metadata.iloc[3, 5],
@@ -77,7 +79,8 @@ def process_checklist_data(uploaded_file):
     try:
         uploaded_file.seek(0) 
         
-        col_indices = [1, 2, 3, 4, 5, 6, 7] # [หัวข้อ, เลขข้อ, คำถาม, OK, PRN, NRIC, หมายเหตุ]
+        # Index คอลัมน์ที่ต้องการ: [1: หัวข้อ, 2: เลขข้อ, 3: คำถาม, 4: OK, 5: PRN, 6: NRIC, 7: หมายเหตุ]
+        col_indices = [1, 2, 3, 4, 5, 6, 7] 
         
         if uploaded_file.name.endswith('.xlsx'):
             df_audit = pd.read_excel(uploaded_file, header=13, usecols=col_indices)
@@ -136,7 +139,7 @@ def process_checklist_data(uploaded_file):
     
     # 4b. จัดเรียงข้อมูลตามลำดับที่ผู้ใช้ต้องการ (Final Header Structure)
     final_summary = {
-        # 1. System Info / Metadata
+        # 1. System Info / Metadata (ตามลำดับที่ต้องการ)
         'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         'Date_of_Audit': metadata_raw['Date_of_Audit'],
         'Time_Shift': metadata_raw['Time_Shift'],
@@ -182,15 +185,12 @@ def upload_file_to_drive(uploaded_file, folder_id):
         credentials_dict = st.secrets["gcp_service_account"]
         credentials = service_account.Credentials.from_service_account_info(credentials_dict)
         
-        # Build the Drive service client
         drive_service = build('drive', 'v3', credentials=credentials)
         
-        # Prepare file content
         file_metadata = {
             'name': uploaded_file.name,
             'parents': [folder_id]
         }
-        # ต้อง Reset pointer ของไฟล์ที่อัปโหลดกลับไปที่ 0 ก่อนอ่าน
         uploaded_file.seek(0)
         media_body = io.BytesIO(uploaded_file.getvalue())
 
@@ -211,7 +211,7 @@ def automate_storage_and_save(summary_data, uploaded_file):
     drive_success, drive_message = upload_file_to_drive(uploaded_file, GDRIVE_FOLDER_ID)
     
     if not drive_success:
-        return False, drive_message # ถ้าอัปโหลดไฟล์ล้มเหลว ให้คืนค่าข้อผิดพลาดทันที
+        return False, drive_message
 
     # 2. บันทึกข้อมูลสรุปไปยัง Google Sheets
     try:
@@ -228,7 +228,6 @@ def automate_storage_and_save(summary_data, uploaded_file):
 
         worksheet.append_row(values)
         
-        # 3. รวมข้อความแจ้งเตือนทั้งหมด
         sheet_message = f"บันทึกข้อมูลสำเร็จใน Sheet: **{WORKSHEET_NAME}**"
         final_message = f"✅ **การทำงานเสร็จสมบูรณ์:** {drive_message}. {sheet_message}"
         return True, final_message
@@ -239,7 +238,7 @@ def automate_storage_and_save(summary_data, uploaded_file):
         return False, f"❌ Error GSheets Save: {e}"
 
 
-# --- 4. Streamlit UI (แสดงผล) ---
+# --- 4. Streamlit UI (แสดงผลตาม Layout ใหม่) ---
 
 st.set_page_config(layout="wide", page_title="Heat Transfer Audit App")
 st.title("🔥 ระบบประเมิน Heat Transfer Process Audit")
@@ -247,8 +246,7 @@ st.markdown("---")
 
 # 1. อัปโหลดไฟล์ Heat Transfer Checklist
 st.header("1. อัปโหลดไฟล์ Heat Transfer Checklist")
-uploaded_file_placeholder = st.empty() # Placeholder สำหรับเก็บไฟล์ที่อัปโหลด
-uploaded_file = uploaded_file_placeholder.file_uploader(
+uploaded_file = st.file_uploader(
     "อัปโหลดไฟล์ที่กรอกข้อมูลแล้ว (.xlsx หรือ .csv)",
     type=["xlsx", "csv"]
 )
