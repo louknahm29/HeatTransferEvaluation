@@ -20,7 +20,7 @@ GDRIVE_FOLDER_ID = "1lpKmazYDw907m-2sGF-MfRisNMd3lkzg"
 
 # กำหนดเกณฑ์คะแนน
 SCORE_MAPPING = {
-    'OK': 3, 'PRN': 2, 'NRIC': 1, 'Blank': 0 
+    'OK (3)': 3, 'PRN (2)': 2, 'NRIC (1)': 1, 'Blank': 0 
 }
 
 # ⚠️ กำหนด Main Categories ตามชื่อเต็มที่ใช้ในการจัดกลุ่ม ⚠️
