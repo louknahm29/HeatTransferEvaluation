@@ -25,15 +25,15 @@ SCORE_MAPPING = {
 
 # ⚠️ กำหนด Main Categories ตามชื่อเต็มที่ใช้ในการจัดกลุ่ม ⚠️
 MAIN_CATEGORIES = [
-    "1. People (บุคลากร)", "2. Machine (เครื่องจักร)", "3. Materials (วัสดุ)", "4. Method (วิธีการ)", 
-    "5. Measurement (การวัด)", "6. Environment (สภาพแวดล้อม)", "7. Documentation & Control (เอกสารและการควบคุม)"
+    "1. บุคลากร", "2. เครื่องจักร", "3. วัสดุ", "4. วิธีการ", 
+    "5. การวัด", "6. สภาพแวดล้อม", "7. Documentation & Control"
 ]
 
 # ⚠️ NEW: Mapping Category ID (1, 2, 3...) to Full Name
 CATEGORY_ID_MAP = {
-    '1': "1. People (บุคลากร)", '2': "2. Machine (เครื่องจักร)", '3': "3. Materials (วัสดุ)", 
-    '4': "4. Method (วิธีการ)", '5': "5. Measurement (การวัด)", '6': "6. Environment (สภาพแวดล้อม)", 
-    '7': "7. Documentation & Control (เอกสารและการควบคุม)"
+    '1': "1. บุคลากร", '2': "2. เครื่องจักร", '3': "3. วัสดุ", 
+    '4': "4. วิธีการ", '5': "5. การวัด", '6': "6. สภาพแวดล้อม", 
+    '7': "7. Documentation & Control"
 }
 
 
@@ -55,13 +55,11 @@ def process_checklist_data(uploaded_file):
     try:
         uploaded_file.seek(0)
         
-        # ปรับ nrows เป็น 15 เพื่อดึงส่วนหัวทั้งหมด (Row 1-15)
         if uploaded_file.name.endswith('.xlsx'):
             df_metadata = pd.read_excel(uploaded_file, nrows=15, header=None)
         else:
             df_metadata = pd.read_csv(uploaded_file, nrows=15, header=None)
         
-        # Mapping ข้อมูลจากตำแหน่งเซลล์ในไฟล์ (อิงตาม Value Column Index)
         metadata_raw = {
             'Date_of_Audit': df_metadata.iloc[3, 2],
             'Time_Shift': df_metadata.iloc[3, 5],
@@ -86,22 +84,18 @@ def process_checklist_data(uploaded_file):
         uploaded_file.seek(0) 
         
         # Index คอลัมน์ที่ต้องการ: [1: หัวข้อ, 2: เลขข้อ, 3: คำถาม, 5: OK, 6: PRN, 7: NRIC, 8: หมายเหตุ]
-        # ⚠️ NOTE: ใช้ [1, 2, 3, 5, 6, 7, 8] เพื่อข้าม Index 4 (คอลัมน์ว่าง)
         col_indices = [1, 2, 3, 5, 6, 7, 8] 
         
         if uploaded_file.name.endswith('.xlsx'):
-            # ใช้ header=15 (แถวที่ 16)
             df_audit = pd.read_excel(uploaded_file, header=15, usecols=col_indices)
         else:
             df_audit = pd.read_csv(uploaded_file, header=15, usecols=col_indices)
         
         df_audit.columns = ['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']
             
-        # ⚠️ NEW: Clean up and extract Category ID
-        df_audit = df_audit.dropna(subset=['คำถาม']).copy() # Remove non-question rows
-        # ดึงตัวเลขตัวแรกจาก เลขข้อ (e.g., '1.1' -> '1')
+        # ⚠️ Clean up and extract Category ID (ใช้เลขข้อเป็นเกณฑ์)
+        df_audit = df_audit.dropna(subset=['คำถาม']).copy() 
         df_audit['Category_ID'] = df_audit['เลขข้อ'].astype(str).str.split('.', expand=True)[0]
-        # กรองเฉพาะแถวที่มี ID ตรงกับ Main Categories
         df_audit = df_audit[df_audit['Category_ID'].isin(CATEGORY_ID_MAP.keys())].reset_index(drop=True)
         
     except Exception as e:
@@ -124,7 +118,7 @@ def process_checklist_data(uploaded_file):
             df_audit.loc[index, 'Scoring Category'] = 'NRIC'
 
 
-    # 4. Summary and Group Scoring (*** ใช้ Category_ID ในการ Group ***)
+    # 4. Summary and Group Scoring (*** ส่วนที่ปรับปรุง: ใช้ / คั่น ***)
     df_audited_q = df_audit[df_audit['Score'] > 0]
     total_possible_questions = len(df_audited_q) 
     actual_score = df_audited_q['Score'].sum()
@@ -135,19 +129,19 @@ def process_checklist_data(uploaded_file):
     # 4a. คำนวณคะแนนและ Remarks รายหมวดหมู่
     group_scores_detailed = {}
     
-    # ⚠️ Grouping ด้วย Category_ID แทน 'หัวข้อ'
     if 'Category_ID' in df_audited_q.columns:
         for category_id, group_df in df_audited_q.groupby('Category_ID'):
             
-            # ใช้ CATEGORY_ID_MAP เพื่อดึงชื่อเต็ม (e.g., '1. บุคลากร')
             group_full_name = CATEGORY_ID_MAP.get(category_id, 'Unknown')
             group_name = group_full_name.split('.', 1)[-1].strip().replace(' ', '_').replace('/', '_').replace('&', '').strip()
             
             group_score = group_df['Score'].sum()
             max_group_score = len(group_df) * SCORE_MAPPING['OK']
             
+            # ⚠️ CHANGE: ใช้ "/" คั่นระหว่างหมายเหตุ (แทนที่ "; ")
             group_remarks_list = group_df['หมายเหตุ'].dropna().tolist()
-            group_remarks_text = "; ".join(group_remarks_list)
+            group_remarks_text = " / ".join(group_remarks_list)
+            # ------------------------------------------------------------------
             
             # เก็บข้อมูลเชิงลึก
             group_scores_detailed[f'Score_{group_name}'] = f"{group_score}/{max_group_score}"
@@ -294,7 +288,7 @@ if uploaded_file is not None:
         
         group_summary_data = []
         for category_th in MAIN_CATEGORIES:
-            key_name = category_th.split('.', 1)[-1].strip().replace(' ', '_').replace('&', '').strip()
+            key_name = category_th.split('.', 1)[-1].strip().replace(' ', '_').replace('&', '').strip() 
             
             actual = summary.get(f'Score_{key_name}_Actual', 0)
             max_score = summary.get(f'Score_{key_name}_Max', 0)
