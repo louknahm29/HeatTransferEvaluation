@@ -25,15 +25,15 @@ SCORE_MAPPING = {
 
 # ⚠️ กำหนด Main Categories ตามชื่อเต็มที่ใช้ในการจัดกลุ่ม ⚠️
 MAIN_CATEGORIES = [
-    "1. People (บุคลากร)", "2. Machine (เครื่องจักร)", "3. Materials (วัสดุ)", "4. Method (วิธีการ)", 
-    "5. Measurement (การวัด)", "6. Environment (สภาพแวดล้อม)", "7. Documentation & Control (เอกสารและการควบคุม)"
+    "1. บุคลากร", "2. เครื่องจักร", "3. วัสดุ", "4. วิธีการ", 
+    "5. การวัด", "6. สภาพแวดล้อม", "7. Documentation & Control"
 ]
 
 # ⚠️ NEW: Mapping Category ID (1, 2, 3...) to Full Name
 CATEGORY_ID_MAP = {
-    '1': "1. People (บุคลากร)", '2': "2. Machine (เครื่องจักร)", '3': "3. Materials (วัสดุ)", 
-    '4': "4. Method (วิธีการ)", '5': "5. Measurement (การวัด)", '6': "6. Environment (สภาพแวดล้อม)", 
-    '7': "7. Documentation & Control (เอกสารและการควบคุม)"
+    '1': "1. บุคลากร", '2': "2. เครื่องจักร", '3': "3. วัสดุ", 
+    '4': "4. วิธีการ", '5': "5. การวัด", '6': "6. สภาพแวดล้อม", 
+    '7': "7. Documentation & Control"
 }
 
 
@@ -93,6 +93,10 @@ def process_checklist_data(uploaded_file):
         
         df_audit.columns = ['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']
             
+        # ⚠️ FIX: ใช้ ffill เพื่อเติมเต็มคอลัมน์ 'หัวข้อ' ก่อนการประมวลผล
+        df_audit['หัวข้อ'] = df_audit['หัวข้อ'].ffill() 
+        
+        # ⚠️ Clean up and extract Category ID (ใช้เลขข้อเป็นเกณฑ์)
         df_audit = df_audit.dropna(subset=['คำถาม']).copy() 
         df_audit['Category_ID'] = df_audit['เลขข้อ'].astype(str).str.split('.', expand=True)[0]
         df_audit = df_audit[df_audit['Category_ID'].isin(CATEGORY_ID_MAP.keys())].reset_index(drop=True)
@@ -117,7 +121,7 @@ def process_checklist_data(uploaded_file):
             df_audit.loc[index, 'Scoring Category'] = 'NRIC'
 
 
-    # 4. Summary and Group Scoring (*** ใช้ Category_ID ในการ Group ***)
+    # 4. Summary and Group Scoring
     df_audited_q = df_audit[df_audit['Score'] > 0]
     total_possible_questions = len(df_audited_q) 
     actual_score = df_audited_q['Score'].sum()
@@ -132,16 +136,14 @@ def process_checklist_data(uploaded_file):
         for category_id, group_df in df_audited_q.groupby('Category_ID'):
             
             group_full_name = CATEGORY_ID_MAP.get(category_id, 'Unknown')
-            # NOTE: ใช้ชื่อที่ไม่มีตัวเลขนำหน้าสำหรับคีย์ใน Dictionary
             group_name = group_full_name.split('.', 1)[-1].strip().replace(' ', '_').replace('/', '_').replace('&', '').strip()
             
             group_score = group_df['Score'].sum()
             max_group_score = len(group_df) * SCORE_MAPPING['OK']
             
             group_remarks_list = group_df['หมายเหตุ'].dropna().tolist()
-            group_remarks_text = " / ".join(group_remarks_list) 
+            group_remarks_text = " / ".join(group_remarks_list)
             
-            # เก็บข้อมูลเชิงลึก
             group_scores_detailed[f'Score_{group_name}'] = f"{group_score}/{max_group_score}"
             group_scores_detailed[f'Score_{group_name}_Actual'] = group_score
             group_scores_detailed[f'Score_{group_name}_Max'] = max_group_score
@@ -167,7 +169,6 @@ def process_checklist_data(uploaded_file):
         'Grade_Level': grade_level,
         'Description': description,
         
-        # 3. Simplified Group Scores (ตามลำดับที่ต้องการ)
         'Score_บุคลากร': group_scores_detailed.get('Score_บุคลากร', '0/0'),
         'Score_เครื่องจักร': group_scores_detailed.get('Score_เครื่องจักร', '0/0'),
         'Score_วัสดุ': group_scores_detailed.get('Score_วัสดุ', '0/0'),
@@ -176,7 +177,6 @@ def process_checklist_data(uploaded_file):
         'Score_สภาพแวดล้อม': group_scores_detailed.get('Score_สภาพแวดล้อม', '0/0'),
         'Score_Documentation_Control': group_scores_detailed.get('Score_Documentation_Control', '0/0'),
         
-        # 4. Detailed Scores (ข้อมูลเชิงลึกที่เหลือ)
         'Total_Questions_Audited': total_possible_questions,
         'Max_Possible_Score': total_possible_score,
     }
