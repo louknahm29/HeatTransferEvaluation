@@ -53,6 +53,7 @@ def process_checklist_data(uploaded_file):
         else:
             df_metadata = pd.read_csv(uploaded_file, nrows=15, header=None)
         
+        # Mapping ข้อมูลจากตำแหน่งเซลล์ในไฟล์ (อิงตาม Value Column Index)
         metadata_raw = {
             'Date_of_Audit': df_metadata.iloc[3, 2],
             'Time_Shift': df_metadata.iloc[3, 5],
@@ -72,17 +73,21 @@ def process_checklist_data(uploaded_file):
         }
 
 
-    # 2. Loading Audit Questions
+    # 2. Loading Audit Questions (*** ส่วนที่ปรับปรุง: Index Shift -1 และ header=15 ***)
     try:
         uploaded_file.seek(0) 
         
-        col_indices = [1, 2, 3, 4, 5, 6, 7] 
+        # Index คอลัมน์ที่ต้องการ: [1: หัวข้อ, 2: เลขข้อ, 3: คำถาม, 5: OK, 6: PRN, 7: NRIC, 8: หมายเหตุ]
+        # ⚠️ NEW: Skip Index 4 (Blank Column) และโหลดถึง Index 8 (หมายเหตุ)
+        col_indices = [1, 2, 3, 5, 6, 7, 8] 
         
         if uploaded_file.name.endswith('.xlsx'):
-            df_audit = pd.read_excel(uploaded_file, header=13, usecols=col_indices)
+            # ใช้ header=15 (แถวที่ 16)
+            df_audit = pd.read_excel(uploaded_file, header=15, usecols=col_indices)
         else:
-            df_audit = pd.read_csv(uploaded_file, header=13, usecols=col_indices)
+            df_audit = pd.read_csv(uploaded_file, header=15, usecols=col_indices)
         
+        # กำหนดชื่อคอลัมน์ใหม่ตามลำดับ Index ที่เลือก
         df_audit.columns = ['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']
             
         df_audit = df_audit.dropna(subset=['คำถาม']).reset_index(drop=True)
@@ -126,7 +131,6 @@ def process_checklist_data(uploaded_file):
             group_remarks_list = group_df['หมายเหตุ'].dropna().tolist()
             group_remarks_text = "; ".join(group_remarks_list)
             
-            # เก็บข้อมูลเชิงลึก
             group_scores_detailed[f'Score_{group_name}'] = f"{group_score}/{max_group_score}"
             group_scores_detailed[f'Score_{group_name}_Actual'] = group_score
             group_scores_detailed[f'Score_{group_name}_Max'] = max_group_score
@@ -135,7 +139,6 @@ def process_checklist_data(uploaded_file):
     
     # 4b. จัดเรียงข้อมูลตามลำดับที่ผู้ใช้ต้องการ (Final Header Structure)
     final_summary = {
-        # 1. System Info / Metadata (ตามลำดับที่ต้องการ)
         'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         'Date_of_Audit': metadata_raw['Date_of_Audit'],
         'Time_Shift': metadata_raw['Time_Shift'],
@@ -147,14 +150,12 @@ def process_checklist_data(uploaded_file):
         'Auditor': metadata_raw['Auditor'],
         'File_Name': metadata_raw['File_Name'],
         
-        # 2. Overall Summary
         'Actual_Score': actual_score,
         'Score_Percentage_pct': round(percentage, 2),
         'Grade': grade,
         'Grade_Level': grade_level,
         'Description': description,
         
-        # 3. Simplified Group Scores (ตามลำดับที่ต้องการ)
         'Score_บุคลากร': group_scores_detailed.get('Score_บุคลากร', '0/0'),
         'Score_เครื่องจักร': group_scores_detailed.get('Score_เครื่องจักร', '0/0'),
         'Score_วัสดุ': group_scores_detailed.get('Score_วัสดุ', '0/0'),
@@ -163,7 +164,6 @@ def process_checklist_data(uploaded_file):
         'Score_สภาพแวดล้อม': group_scores_detailed.get('Score_สภาพแวดล้อม', '0/0'),
         'Score_Documentation_Control': group_scores_detailed.get('Score_Documentation_Control', '0/0'),
         
-        # 4. Detailed Scores (ข้อมูลเชิงลึกที่เหลือ)
         'Total_Questions_Audited': total_possible_questions,
         'Max_Possible_Score': total_possible_score,
     }
@@ -283,9 +283,8 @@ if uploaded_file is not None:
             
             group_summary_data.append({
                 'Main Category': category_th,
-                'คะแนนที่ได้ (Actual)': actual, # New Column 
-                'คะแนนเต็ม (Max)': max_score,   # New Column
-                'เปอร์เซ็นต์ (%)': f"{percentage:.2f}%", 
+                'คะแนนที่ได้': f"{actual} / {max_score}",
+                'เปอร์เซ็นต์ (%)': f"{percentage:.2f}%",
                 'หมายเหตุ': remarks_text
             })
 
