@@ -83,7 +83,7 @@ def process_checklist_data(uploaded_file):
     try:
         uploaded_file.seek(0) 
         
-        # Index คอลัมน์ที่ต้องการ: [1: หัวข้อ, 2: เลขข้อ, 3: คำถาม, 5: OK, 6: PRN, 7: NRIC, 8: หมายเหตุ]
+        # Index คอลัมน์ที่ต้องการ: [1: Main Cetegory (หัวข้อ), 2: No. (ข้อที่) , 3: Question (คำถาม), 5: OK (3), 6: PRN (2), 7: NRIC (1), 8: Remark (หมายเหตุ)]
         col_indices = [1, 2, 3, 5, 6, 7, 8] 
         
         if uploaded_file.name.endswith('.xlsx'):
@@ -91,10 +91,10 @@ def process_checklist_data(uploaded_file):
         else:
             df_audit = pd.read_csv(uploaded_file, header=13, usecols=col_indices)
         
-        df_audit.columns = ['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']
+        df_audit.columns = ['Main Cetegory (หัวข้อ)', 'No. (ข้อที่)', 'Question (คำถาม)', 'OK (3)', 'PRN (2)', 'NRIC (1)', 'Remark (หมายเหตุ)']
             
-        df_audit = df_audit.dropna(subset=['คำถาม']).copy() 
-        df_audit['Category_ID'] = df_audit['เลขข้อ'].astype(str).str.split('.', expand=True)[0]
+        df_audit = df_audit.dropna(subset=['Question (คำถาม)']).copy() 
+        df_audit['Category_ID'] = df_audit['No. (ข้อที่)'].astype(str).str.split('.', expand=True)[0]
         df_audit = df_audit[df_audit['Category_ID'].isin(CATEGORY_ID_MAP.keys())].reset_index(drop=True)
         
     except Exception as e:
