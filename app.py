@@ -1,22 +1,30 @@
-# app.py (โค้ดฉบับสมบูรณ์สำหรับ Deploy)
+# app.py (Final Version: รวม GDrive Upload และ GSheets Save)
 
 import streamlit as st
 import pandas as pd
 from datetime import datetime
 import gspread 
 import io 
+# --- NEW IMPORTS FOR GOOGLE DRIVE API ---
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+# ----------------------------------------
 
 # --- 1. Global Configuration ---
 # Google Sheet ID และ Worksheet Name
 GOOGLE_SHEET_ID = "1E6WpIgmUBZ2bPpBxSW08ktKUKJGahmzqjVcMDfsqMec"
 WORKSHEET_NAME = "FactoryAudit"
 
+# Google Drive Folder ID สำหรับเก็บไฟล์ที่อัปโหลด
+# ID จากลิงก์: https://drive.google.com/drive/u/0/folders/1lpKmazYDw907m-2sGF-MfRisNMd3lkzg
+GDRIVE_FOLDER_ID = "1lpKmazYDw907m-2sGF-MfRisNMd3lkzg"
+
 # กำหนดเกณฑ์คะแนน
 SCORE_MAPPING = {
     'OK': 3, 'PRN': 2, 'NRIC': 1, 'Blank': 0 
 }
 
-# กำหนด Main Categories และ Remarks (สำหรับใช้ในตารางสรุป 7 ด้าน)
+# กำหนด Main Categories
 MAIN_CATEGORIES = [
     "บุคลากร", "เครื่องจักร", "วัสดุ", "วิธีการ", 
     "การวัด", "สภาพแวดล้อม", "Documentation & Control"
@@ -36,7 +44,7 @@ def get_grade_and_description(percentage):
 def process_checklist_data(uploaded_file):
     """ทำความสะอาดข้อมูล, คำนวณคะแนน, และสรุปผลจากไฟล์ที่อัปโหลด"""
 
-    # 1. Loading Metadata (โหลดข้อมูลบริบทจากส่วนหัว)
+    # 1. Loading Metadata 
     try:
         uploaded_file.seek(0)
         
@@ -65,20 +73,18 @@ def process_checklist_data(uploaded_file):
         }
 
 
-    # 2. Loading Audit Questions (*** ส่วนที่ปรับปรุง: เพิ่ม Index 2 สำหรับเลขข้อ ***)
+    # 2. Loading Audit Questions
     try:
         uploaded_file.seek(0) 
         
-        # Index คอลัมน์ที่ต้องการ: [1: เลขข้อ, 2: คำถาม, 3: OK, 4: PRN, 5: NRIC, 6: หมายเหตุ]
-        col_indices = [1, 2, 3, 4, 5, 6] 
+        col_indices = [1, 2, 3, 4, 5, 6, 7] # [หัวข้อ, เลขข้อ, คำถาม, OK, PRN, NRIC, หมายเหตุ]
         
         if uploaded_file.name.endswith('.xlsx'):
-            df_audit = pd.read_excel(uploaded_file, header=15, usecols=col_indices)
+            df_audit = pd.read_excel(uploaded_file, header=13, usecols=col_indices)
         else:
-            df_audit = pd.read_csv(uploaded_file, header=15, usecols=col_indices)
+            df_audit = pd.read_csv(uploaded_file, header=13, usecols=col_indices)
         
-        # กำหนดชื่อคอลัมน์ใหม่ตามลำดับ Index ที่เลือก
-        df_audit.columns = ['เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']
+        df_audit.columns = ['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']
             
         df_audit = df_audit.dropna(subset=['คำถาม']).reset_index(drop=True)
         
@@ -86,7 +92,7 @@ def process_checklist_data(uploaded_file):
         st.error(f"เกิดข้อผิดพลาดในการอ่านไฟล์หรือโครงสร้างคอลัมน์ไม่ถูกต้อง: {e}")
         return None, None, None
 
-    # 3. Scoring: คำนวณคะแนนในแต่ละข้อ
+    # 3. Scoring
     df_audit['Score'] = 0
     df_audit['Scoring Category'] = 'Blank'
 
@@ -121,6 +127,7 @@ def process_checklist_data(uploaded_file):
             group_remarks_list = group_df['หมายเหตุ'].dropna().tolist()
             group_remarks_text = "; ".join(group_remarks_list)
             
+            # เก็บข้อมูลเชิงลึก
             group_scores_detailed[f'Score_{group_name}'] = f"{group_score}/{max_group_score}"
             group_scores_detailed[f'Score_{group_name}_Actual'] = group_score
             group_scores_detailed[f'Score_{group_name}_Max'] = max_group_score
@@ -129,6 +136,7 @@ def process_checklist_data(uploaded_file):
     
     # 4b. จัดเรียงข้อมูลตามลำดับที่ผู้ใช้ต้องการ (Final Header Structure)
     final_summary = {
+        # 1. System Info / Metadata
         'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         'Date_of_Audit': metadata_raw['Date_of_Audit'],
         'Time_Shift': metadata_raw['Time_Shift'],
@@ -140,6 +148,7 @@ def process_checklist_data(uploaded_file):
         'Auditor': metadata_raw['Auditor'],
         'File_Name': metadata_raw['File_Name'],
         
+        # 2. Overall Summary
         'Actual_Score': actual_score,
         'Score_Percentage_pct': round(percentage, 2),
         'Grade': grade,
@@ -165,9 +174,46 @@ def process_checklist_data(uploaded_file):
 
     return df_audit, final_summary, df_audited_q
 
-# --- 3. Google Sheets Integration ---
-def save_to_google_sheet(summary_data):
-    """บันทึกข้อมูลสรุปไปยัง Google Sheet ที่ระบุ"""
+# --- 3. GOOGLE SHEETS & DRIVE INTEGRATION (การปรับปรุง) ---
+
+def upload_file_to_drive(uploaded_file, folder_id):
+    """ฟังก์ชันอัปโหลดไฟล์ไปยัง Google Drive โดยใช้ Service Account"""
+    try:
+        credentials_dict = st.secrets["gcp_service_account"]
+        credentials = service_account.Credentials.from_service_account_info(credentials_dict)
+        
+        # Build the Drive service client
+        drive_service = build('drive', 'v3', credentials=credentials)
+        
+        # Prepare file content
+        file_metadata = {
+            'name': uploaded_file.name,
+            'parents': [folder_id]
+        }
+        # ต้อง Reset pointer ของไฟล์ที่อัปโหลดกลับไปที่ 0 ก่อนอ่าน
+        uploaded_file.seek(0)
+        media_body = io.BytesIO(uploaded_file.getvalue())
+
+        file = drive_service.files().create(
+            body=file_metadata,
+            media_body=media_body,
+            fields='id'
+        ).execute()
+        
+        return True, f"บันทึกไฟล์สำเร็จ (File ID: {file.get('id')})"
+    except Exception as e:
+        return False, f"❌ Error GDrive Upload: {e}"
+
+def automate_storage_and_save(summary_data, uploaded_file):
+    """จัดการการจัดเก็บไฟล์ (Drive) และบันทึกข้อมูล (Sheets)"""
+    
+    # 1. อัปโหลดไฟล์ไปยัง Google Drive
+    drive_success, drive_message = upload_file_to_drive(uploaded_file, GDRIVE_FOLDER_ID)
+    
+    if not drive_success:
+        return False, drive_message # ถ้าอัปโหลดไฟล์ล้มเหลว ให้คืนค่าข้อผิดพลาดทันที
+
+    # 2. บันทึกข้อมูลสรุปไปยัง Google Sheets
     try:
         gc = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
         
@@ -181,16 +227,19 @@ def save_to_google_sheet(summary_data):
             worksheet.append_row(headers)
 
         worksheet.append_row(values)
-        return True, f"บันทึกข้อมูลสำเร็จใน Google Sheet (Worksheet: **{WORKSHEET_NAME}**)"
+        
+        # 3. รวมข้อความแจ้งเตือนทั้งหมด
+        sheet_message = f"บันทึกข้อมูลสำเร็จใน Sheet: **{WORKSHEET_NAME}**"
+        final_message = f"✅ **การทำงานเสร็จสมบูรณ์:** {drive_message}. {sheet_message}"
+        return True, final_message
 
     except KeyError:
         return False, "❌ **Error:** กรุณาตั้งค่า `secrets.toml` และ Service Account Key ให้ถูกต้อง!"
-    except gspread.WorksheetNotFound:
-        return False, f"❌ **Error:** ไม่พบ Worksheet ชื่อ '{WORKSHEET_NAME}' ใน Google Sheet ID ที่กำหนด!"
     except Exception as e:
-        return False, f"❌ เกิดข้อผิดพลาดในการบันทึก Google Sheet: {e}"
+        return False, f"❌ Error GSheets Save: {e}"
 
-# --- 4. Streamlit UI (แสดงผลตาม Layout ใหม่) ---
+
+# --- 4. Streamlit UI (แสดงผล) ---
 
 st.set_page_config(layout="wide", page_title="Heat Transfer Audit App")
 st.title("🔥 ระบบประเมิน Heat Transfer Process Audit")
@@ -198,7 +247,8 @@ st.markdown("---")
 
 # 1. อัปโหลดไฟล์ Heat Transfer Checklist
 st.header("1. อัปโหลดไฟล์ Heat Transfer Checklist")
-uploaded_file = st.file_uploader(
+uploaded_file_placeholder = st.empty() # Placeholder สำหรับเก็บไฟล์ที่อัปโหลด
+uploaded_file = uploaded_file_placeholder.file_uploader(
     "อัปโหลดไฟล์ที่กรอกข้อมูลแล้ว (.xlsx หรือ .csv)",
     type=["xlsx", "csv"]
 )
@@ -277,16 +327,12 @@ if uploaded_file is not None:
         ### 5. รายละเอียดการประเมินรายข้อ (แสดงเหมือนแบบฟอร์ม)
         st.header("5. รายละเอียดการประเมินรายข้อ")
         
-        # *** ปรับปรุง: แสดง Header และใช้ Styling เพื่อให้ดูเหมือนฟอร์ม ***
-        
         # เตรียม DataFrame สำหรับแสดงผล
-        # เราจะสร้างตารางชั่วคราวที่มีเฉพาะคอลัมน์ที่ต้องการ
         df_display = df_audit_result[['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']].copy()
         
         # 5a. ล้างค่าในคอลัมน์ 'หัวข้อ' ออก เพื่อให้แสดงเพียงครั้งเดียว
         df_display['หัวข้อ'] = df_display['หัวข้อ'].mask(df_display['หัวข้อ'].duplicated(), '')
         
-        # 5b. จัดเรียงคอลัมน์ใหม่ตามลำดับการแสดงผลที่ผู้ใช้ต้องการ
         st.dataframe(
             df_display,
             column_order=['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ'],
@@ -299,11 +345,12 @@ if uploaded_file is not None:
         ### 6. บันทึกผลสรุป
         st.header("6. บันทึกผลสรุป")
         
-        if st.button("บันทึกผลสรุปทั้งหมดไปยัง Google Sheet"):
-            success, message = save_to_google_sheet(summary)
+        if st.button("บันทึกผลสรุปและจัดเก็บไฟล์ทั้งหมด"):
+            # เรียกใช้ฟังก์ชันรวมเพื่ออัปโหลดไฟล์และบันทึกข้อมูล
+            success, message = automate_storage_and_save(summary, uploaded_file)
             if success:
                 st.success(message)
-                st.write("ข้อมูลทั้งหมด (Metadata, คะแนนรวม, คะแนน 7 ด้าน) ได้ถูกบันทึกเป็น Header ใน Google Sheet เรียบร้อยแล้ว")
+                st.write("ข้อมูลทั้งหมด (Metadata, คะแนนรวม, คะแนน 7 ด้าน) ได้ถูกบันทึกใน Google Sheet และไฟล์ต้นฉบับได้ถูกจัดเก็บใน Google Drive เรียบร้อยแล้ว")
                 
             else:
                 st.error(message)
