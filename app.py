@@ -74,7 +74,7 @@ def process_checklist_data(uploaded_file):
 
     # 2. Loading Audit Questions
     try:
-        uploaded_file.seek(1) 
+        uploaded_file.seek(0) 
         
         # Index คอลัมน์ที่ต้องการ: [1: หัวข้อ, 2: เลขข้อ, 3: คำถาม, 4: OK, 5: PRN, 6: NRIC, 7: หมายเหตุ]
         col_indices = [1, 2, 3, 4, 5, 6, 7] 
@@ -319,7 +319,7 @@ if uploaded_file is not None:
 
         st.markdown("---")
         
-        ### 5. รายละเอียดการประเมินรายข้อ (แสดงเหมือนแบบฟอร์ม)
+### 5. รายละเอียดการประเมินรายข้อ (แสดงเหมือนแบบฟอร์ม)
         st.header("5. รายละเอียดการประเมินรายข้อ")
         
         # เตรียม DataFrame สำหรับแสดงผล
@@ -328,6 +328,10 @@ if uploaded_file is not None:
         # 5a. ล้างค่าในคอลัมน์ 'หัวข้อ' ออก เพื่อให้แสดงเพียงครั้งเดียว
         df_display['หัวข้อ'] = df_display['หัวข้อ'].mask(df_display['หัวข้อ'].duplicated(), '')
         
+        # 5b. ทำความสะอาดค่าว่าง/None ในคอลัมน์คะแนน/หมายเหตุ 
+        cols_to_clean = ['OK', 'PRN', 'NRIC', 'หมายเหตุ']
+        df_display[cols_to_clean] = df_display[cols_to_clean].fillna('')
+
         st.dataframe(
             df_display,
             column_order=['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ'],
@@ -336,7 +340,6 @@ if uploaded_file is not None:
         )
 
         st.markdown("---")
-        
         ### 6. บันทึกผลสรุป
         st.header("6. บันทึกผลสรุป")
         
