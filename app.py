@@ -74,7 +74,7 @@ def process_checklist_data(uploaded_file):
 
     # 2. Loading Audit Questions
     try:
-        uploaded_file.seek(0) 
+        uploaded_file.seek(1) 
         
         # Index คอลัมน์ที่ต้องการ: [1: หัวข้อ, 2: เลขข้อ, 3: คำถาม, 4: OK, 5: PRN, 6: NRIC, 7: หมายเหตุ]
         col_indices = [1, 2, 3, 4, 5, 6, 7] 
