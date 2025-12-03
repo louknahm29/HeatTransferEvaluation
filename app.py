@@ -25,8 +25,8 @@ SCORE_MAPPING = {
 
 # ⚠️ กำหนด Main Categories ตามชื่อเต็มที่ใช้ในการจัดกลุ่ม ⚠️
 MAIN_CATEGORIES = [
-    "1. บุคลากร", "2. เครื่องจักร", "3. วัสดุ", "4. วิธีการ", 
-    "5. การวัด", "6. สภาพแวดล้อม", "7. Documentation & Control"
+    "1. People (บุคลากร)", "2. Machine (เครื่องจักร)", "3. Materials (วัสดุ)", "4. Method (วิธีการ)", 
+    "5. Measurement (การวัด)", "6. Environment (สภาพแวดล้อม)", "7. Documentation & Control (เอกสารและการควบคุม)"
 ]
 
 # ⚠️ NEW: Mapping Category ID (1, 2, 3...) to Full Name (ใช้ชื่อย่อภาษาอังกฤษสำหรับ Key)
