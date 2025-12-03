@@ -144,7 +144,6 @@ def process_checklist_data(uploaded_file):
             group_remarks_list = group_df['หมายเหตุ'].dropna().tolist()
             group_remarks_text = " / ".join(group_remarks_list)
             
-            # เก็บข้อมูลเชิงลึก
             group_scores_detailed[f'Score_{group_name}'] = f"{group_score}/{max_group_score}"
             group_scores_detailed[f'Score_{group_name}_Actual'] = group_score
             group_scores_detailed[f'Score_{group_name}_Max'] = max_group_score
@@ -214,77 +213,6 @@ def upload_file_to_drive(uploaded_file, folder_id):
         return True, f"บันทึกไฟล์สำเร็จ (File ID: {file.get('id')})"
     except Exception as e:
         return False, f"❌ Error GDrive Upload: {e}"
-
-def save_to_google_sheet(summary_data, worksheet_name):
-    """บันทึกข้อมูลสรุปไปยัง Google Sheet (Summary Sheet)"""
-    try:
-        gc = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
-        spreadsheet = gc.open_by_key(GOOGLE_SHEET_ID)
-        worksheet = spreadsheet.worksheet(worksheet_name) 
-
-        headers = list(summary_data.keys())
-        values = list(summary_data.values())
-
-        if worksheet.row_values(1) != headers:
-            worksheet.append_row(headers)
-
-        worksheet.append_row(values)
-        
-        return True, f"บันทึกข้อมูลสรุปสำเร็จใน Sheet: **{worksheet_name}**"
-
-    except KeyError:
-        raise
-    except Exception as e:
-        return False, f"❌ Error GSheets Save: {e}"
-        
-def save_itemized_data(df_itemized, summary_metadata, worksheet_name):
-    """บันทึกข้อมูลรายข้อย่อยไปยัง Google Sheet (Details Sheet)"""
-    try:
-        gc = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
-        spreadsheet = gc.open_by_key(GOOGLE_SHEET_ID)
-        worksheet = spreadsheet.worksheet(worksheet_name)
-        
-        # 1. เตรียม Metadata ที่ต้องทำซ้ำในทุกแถว
-        metadata_cols = {
-            'Timestamp': summary_metadata['Timestamp'],
-            'Machine_ID': summary_metadata['Machine_ID'],
-            'Auditor': summary_metadata['Auditor'],
-            'Date_of_Audit': summary_metadata['Date_of_Audit'],
-        }
-        
-        # 2. เตรียม DataFrame สำหรับบันทึก
-        df_save = df_itemized.copy()
-        
-        # 3. สร้างคอลัมน์ Metadata นำหน้า
-        for col, val in metadata_cols.items():
-            df_save.insert(0, col, val)
-        
-        # 4. กำหนด Header (ชื่อคอลัมน์) ที่ต้องการใน Google Sheet
-        final_headers = list(metadata_cols.keys()) + [
-            'Category', 'Item_No', 'Question', 'OK_Mark', 'PRN_Mark', 'NRIC_Mark', 'Remark', 'Score_Value'
-        ]
-        
-        # 5. เตรียมข้อมูลเป็น List of Lists
-        # NOTE: เราเลือกเฉพาะคอลัมน์ที่ต้องการจาก df_save
-        df_to_export = df_save[['Timestamp', 'Machine_ID', 'Auditor', 'Date_of_Audit', 
-                                'หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ', 'Score']]
-        
-        # 6. แปลงชื่อคอลัมน์ภายในเป็นชื่อ Header สุดท้าย
-        df_to_export.columns = final_headers
-
-        # 7. บันทึก
-        data_to_append = df_to_export.values.tolist()
-        
-        if worksheet.row_values(1) != final_headers:
-            worksheet.append_row(final_headers)
-
-        worksheet.append_rows(data_to_append)
-        
-        return True, f"บันทึกข้อมูลรายข้อย่อยสำเร็จใน Sheet: **{worksheet_name}**"
-
-    except Exception as e:
-        return False, f"❌ Error Itemized Save: {e}"
-
 
 def automate_storage_and_save(summary_data, df_audit_result, uploaded_file):
     """จัดการการจัดเก็บไฟล์ (Drive), บันทึกข้อมูลสรุป (Summary) และบันทึกข้อมูลย่อย (Details)"""
