@@ -23,11 +23,12 @@ SCORE_MAPPING = {
     'OK': 3, 'PRN': 2, 'NRIC': 1, 'Blank': 0 
 }
 
-# กำหนด Main Categories 
+# ⚠️ กำหนด Main Categories ตามชื่อเต็มที่ใช้ในการจัดกลุ่ม ⚠️
 MAIN_CATEGORIES = [
-    "บุคลากร", "เครื่องจักร", "วัสดุ", "วิธีการ", 
-    "การวัด", "สภาพแวดล้อม", "Documentation & Control"
+    "1. บุคลากร", "2. เครื่องจักร", "3. วัสดุ", "4. วิธีการ", 
+    "5. การวัด", "6. สภาพแวดล้อม", "7. Documentation & Control"
 ]
+# NOTE: โค้ดจะใช้ชื่อเหล่านี้ในการจัดกลุ่มและสร้าง Header ใน Google Sheet
 
 def get_grade_and_description(percentage):
     """กำหนดเกรดและคำอธิบายตามเปอร์เซ็นต์คะแนนรวม"""
@@ -54,8 +55,6 @@ def process_checklist_data(uploaded_file):
             df_metadata = pd.read_csv(uploaded_file, nrows=15, header=None)
         
         # Mapping ข้อมูลจากตำแหน่งเซลล์ในไฟล์ (อิงตาม Value Column Index)
-        # Row Index: Row 4 (Index 3), Row 5 (Index 4), Row 6 (Index 5), Row 7 (Index 6)
-        # Col Index: Col C (Index 2), Col F (Index 5)
         metadata_raw = {
             'Date_of_Audit': df_metadata.iloc[3, 2],
             'Time_Shift': df_metadata.iloc[3, 5],
@@ -83,9 +82,9 @@ def process_checklist_data(uploaded_file):
         col_indices = [1, 2, 3, 4, 5, 6, 7] 
         
         if uploaded_file.name.endswith('.xlsx'):
-            df_audit = pd.read_excel(uploaded_file, header=13, usecols=col_indices)
+            df_audit = pd.read_excel(uploaded_file, header=15, usecols=col_indices)
         else:
-            df_audit = pd.read_csv(uploaded_file, header=13, usecols=col_indices)
+            df_audit = pd.read_csv(uploaded_file, header=15, usecols=col_indices)
         
         df_audit.columns = ['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']
             
@@ -183,7 +182,6 @@ def upload_file_to_drive(uploaded_file, folder_id):
     """ฟังก์ชันอัปโหลดไฟล์ไปยัง Google Drive โดยใช้ Service Account"""
     try:
         credentials_dict = st.secrets["gcp_service_account"]
-        # ต้องระบุ SCOPES ที่จำเป็นสำหรับ Drive API
         SCOPES = ['https://www.googleapis.com/auth/drive.file']
         credentials = service_account.Credentials.from_service_account_info(credentials_dict, scopes=SCOPES)
         
@@ -278,7 +276,7 @@ if uploaded_file is not None:
         
         group_summary_data = []
         for category_th in MAIN_CATEGORIES:
-            key_name = category_th.replace(" ", "_").replace("&", "").strip() 
+            key_name = category_th.split('.', 1)[-1].strip().replace(' ', '_').replace('&', '').strip()
             
             actual = summary.get(f'Score_{key_name}_Actual', 0)
             max_score = summary.get(f'Score_{key_name}_Max', 0)
