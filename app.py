@@ -1,4 +1,4 @@
-# app.py (โค้ดฉบับสมบูรณ์สำหรับ Deploy)
+# app.py (โค้ดฉบับสมบูรณ์)
 
 import streamlit as st
 import pandas as pd
@@ -40,6 +40,7 @@ def process_checklist_data(uploaded_file):
     try:
         uploaded_file.seek(0)
         
+        # ปรับ nrows เป็น 15 เพื่อดึงส่วนหัวทั้งหมด (Row 1-15)
         if uploaded_file.name.endswith('.xlsx'):
             df_metadata = pd.read_excel(uploaded_file, nrows=15, header=None)
         else:
@@ -100,16 +101,15 @@ def process_checklist_data(uploaded_file):
             df_audit.loc[index, 'Scoring Category'] = 'NRIC'
 
 
-    # 4. Summary and Group Scoring
+    # 4. Summary and Group Scoring (*** ส่วนนี้ถูกแยกและจัดเรียงใหม่ทั้งหมด ***)
     df_audited_q = df_audit[df_audit['Score'] > 0]
     total_possible_questions = len(df_audited_q) 
-    total_possible_score = total_possible_questions * SCORE_MAPPING['OK'] 
     actual_score = df_audited_q['Score'].sum()
-
+    total_possible_score = total_possible_questions * SCORE_MAPPING['OK'] 
     percentage = (actual_score / total_possible_score) * 100 if total_possible_score > 0 else 0
     grade, grade_level, description = get_grade_and_description(percentage)
 
-    # คำนวณคะแนนรายหมวดหมู่ (Group Scores) 
+    # 4a. คำนวณคะแนนและ Remarks รายหมวดหมู่
     group_scores_detailed = {}
     if 'หัวข้อ' in df_audited_q.columns:
         for group, group_df in df_audited_q.groupby('หัวข้อ'):
@@ -120,17 +120,18 @@ def process_checklist_data(uploaded_file):
             group_remarks_list = group_df['หมายเหตุ'].dropna().tolist()
             group_remarks_text = "; ".join(group_remarks_list)
             
-            group_scores_detailed[f'Score_{group_name}'] = f"{group_score}/{max_group_score}" # Score_People: 9/9
+            # เก็บข้อมูลเชิงลึก
             group_scores_detailed[f'Score_{group_name}_Actual'] = group_score
             group_scores_detailed[f'Score_{group_name}_Max'] = max_group_score
             group_scores_detailed[f'Remarks_{group_name}'] = group_remarks_text
+            
+            # เก็บข้อมูลแบบง่าย (Simplified Score)
+            group_scores_detailed[f'Score_{group_name}'] = f"{group_score}/{max_group_score}"
     
-    # *** 5. จัดเรียงข้อมูลตามลำดับที่ผู้ใช้ต้องการ (Final Header Structure) ***
+    # 4b. *** จัดเรียงข้อมูลตามลำดับที่ผู้ใช้ต้องการ (Final Header Structure) ***
     final_summary = {
-        # 1. System Info (Timestamp)
+        # 1. System Info / Metadata
         'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        
-        # 2. Metadata (ตามลำดับที่ต้องการ)
         'Date_of_Audit': metadata_raw['Date_of_Audit'],
         'Time_Shift': metadata_raw['Time_Shift'],
         'Factory': metadata_raw['Factory'],
@@ -141,31 +142,30 @@ def process_checklist_data(uploaded_file):
         'Auditor': metadata_raw['Auditor'],
         'File_Name': metadata_raw['File_Name'],
         
-        # 3. Overall Summary
+        # 2. Overall Summary
         'Actual_Score': actual_score,
         'Score_Percentage_pct': round(percentage, 2),
         'Grade': grade,
         'Grade_Level': grade_level,
         'Description': description,
         
-        # 4. Group Scores (Simplified และ Detailed Scores)
+        # 3. Simplified Group Scores (ตามลำดับที่ต้องการ)
+        'Score_บุคลากร': group_scores_detailed.get('Score_บุคลากร', '0/0'),
+        'Score_เครื่องจักร': group_scores_detailed.get('Score_เครื่องจักร', '0/0'),
+        'Score_วัสดุ': group_scores_detailed.get('Score_วัสดุ', '0/0'),
+        'Score_วิธีการ': group_scores_detailed.get('Score_วิธีการ', '0/0'),
+        'Score_การวัด': group_scores_detailed.get('Score_การวัด', '0/0'),
+        'Score_สภาพแวดล้อม': group_scores_detailed.get('Score_สภาพแวดล้อม', '0/0'),
+        'Score_Documentation_Control': group_scores_detailed.get('Score_Documentation_Control', '0/0'),
+        
+        # 4. Detailed Scores (สำหรับ ML/วิเคราะห์เชิงลึก - ข้อมูลจะอยู่ท้ายตาราง)
+        'Total_Questions_Audited': total_possible_questions,
+        'Max_Possible_Score': total_possible_score,
     }
+    
+    # เพิ่ม Detailed Scores (Actual, Max, Remarks) ที่สร้างไว้ เข้าไปท้ายสุด
+    final_summary.update(group_scores_detailed)
 
-    # เพิ่ม Group Scores เข้าไปในลำดับที่ถูกต้อง
-    for category_th in MAIN_CATEGORIES:
-        key_name = category_th.replace(" ", "_").replace("&", "").strip() 
-        
-        # Simplified Score (Score_People)
-        final_summary[f'Score_{key_name}'] = group_scores_detailed.get(f'Score_{key_name}', '0/0')
-        
-        # Detailed Scores (Actual, Max, Remarks)
-        final_summary[f'Score_{key_name}_Actual'] = group_scores_detailed.get(f'Score_{key_name}_Actual', 0)
-        final_summary[f'Score_{key_name}_Max'] = group_scores_detailed.get(f'Score_{key_name}_Max', 0)
-        final_summary[f'Remarks_{key_name}'] = group_scores_detailed.get(f'Remarks_{key_name}', '')
-        
-    # ลบ Total_Questions_Audited/Max_Possible_Score ที่ไม่ได้ใช้
-    del final_summary['Total_Questions_Audited']
-    del final_summary['Max_Possible_Score']
 
     return df_audit, final_summary, df_audited_q
 
@@ -195,7 +195,7 @@ def save_to_google_sheet(summary_data):
         return False, f"❌ เกิดข้อผิดพลาดในการบันทึก Google Sheet: {e}"
 
 # --- 4. Streamlit UI (แสดงผลตาม Layout ใหม่) ---
-# ... (โค้ดส่วนนี้ไม่มีการเปลี่ยนแปลง) ...
+# ... (โค้ดแสดงผลส่วนนี้ไม่มีการเปลี่ยนแปลง) ...
 
 st.set_page_config(layout="wide", page_title="Heat Transfer Audit App")
 st.title("🔥 ระบบประเมิน Heat Transfer Process Audit")
