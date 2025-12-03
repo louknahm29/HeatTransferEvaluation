@@ -1,4 +1,4 @@
-# app.py (โค้ดฉบับสมบูรณ์)
+# app.py (โค้ดฉบับสมบูรณ์สำหรับ Deploy)
 
 import streamlit as st
 import pandas as pd
@@ -40,7 +40,6 @@ def process_checklist_data(uploaded_file):
     try:
         uploaded_file.seek(0)
         
-        # ปรับ nrows เป็น 15 เพื่อดึงส่วนหัวทั้งหมด (Row 1-15)
         if uploaded_file.name.endswith('.xlsx'):
             df_metadata = pd.read_excel(uploaded_file, nrows=15, header=None)
         else:
@@ -66,18 +65,20 @@ def process_checklist_data(uploaded_file):
         }
 
 
-    # 2. Loading Audit Questions
+    # 2. Loading Audit Questions (*** ส่วนที่ปรับปรุง: เพิ่ม Index 2 สำหรับเลขข้อ ***)
     try:
         uploaded_file.seek(0) 
         
-        col_indices = [1, 3, 4, 5, 6, 7] 
+        # Index คอลัมน์ที่ต้องการ: [1: หัวข้อ, 2: เลขข้อ, 3: คำถาม, 4: OK, 5: PRN, 6: NRIC, 7: หมายเหตุ]
+        col_indices = [1, 2, 3, 4, 5, 6, 7] 
         
         if uploaded_file.name.endswith('.xlsx'):
             df_audit = pd.read_excel(uploaded_file, header=13, usecols=col_indices)
         else:
             df_audit = pd.read_csv(uploaded_file, header=13, usecols=col_indices)
         
-        df_audit.columns = ['หัวข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']
+        # กำหนดชื่อคอลัมน์ใหม่ตามลำดับ Index ที่เลือก
+        df_audit.columns = ['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']
             
         df_audit = df_audit.dropna(subset=['คำถาม']).reset_index(drop=True)
         
@@ -85,7 +86,7 @@ def process_checklist_data(uploaded_file):
         st.error(f"เกิดข้อผิดพลาดในการอ่านไฟล์หรือโครงสร้างคอลัมน์ไม่ถูกต้อง: {e}")
         return None, None, None
 
-    # 3. Scoring
+    # 3. Scoring: คำนวณคะแนนในแต่ละข้อ
     df_audit['Score'] = 0
     df_audit['Scoring Category'] = 'Blank'
 
@@ -101,7 +102,7 @@ def process_checklist_data(uploaded_file):
             df_audit.loc[index, 'Scoring Category'] = 'NRIC'
 
 
-    # 4. Summary and Group Scoring (*** ส่วนนี้ถูกแยกและจัดเรียงใหม่ทั้งหมด ***)
+    # 4. Summary and Group Scoring
     df_audited_q = df_audit[df_audit['Score'] > 0]
     total_possible_questions = len(df_audited_q) 
     actual_score = df_audited_q['Score'].sum()
@@ -120,17 +121,14 @@ def process_checklist_data(uploaded_file):
             group_remarks_list = group_df['หมายเหตุ'].dropna().tolist()
             group_remarks_text = "; ".join(group_remarks_list)
             
-            # เก็บข้อมูลเชิงลึก
+            group_scores_detailed[f'Score_{group_name}'] = f"{group_score}/{max_group_score}"
             group_scores_detailed[f'Score_{group_name}_Actual'] = group_score
             group_scores_detailed[f'Score_{group_name}_Max'] = max_group_score
             group_scores_detailed[f'Remarks_{group_name}'] = group_remarks_text
             
-            # เก็บข้อมูลแบบง่าย (Simplified Score)
-            group_scores_detailed[f'Score_{group_name}'] = f"{group_score}/{max_group_score}"
     
-    # 4b. *** จัดเรียงข้อมูลตามลำดับที่ผู้ใช้ต้องการ (Final Header Structure) ***
+    # 4b. จัดเรียงข้อมูลตามลำดับที่ผู้ใช้ต้องการ (Final Header Structure)
     final_summary = {
-        # 1. System Info / Metadata
         'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         'Date_of_Audit': metadata_raw['Date_of_Audit'],
         'Time_Shift': metadata_raw['Time_Shift'],
@@ -142,7 +140,6 @@ def process_checklist_data(uploaded_file):
         'Auditor': metadata_raw['Auditor'],
         'File_Name': metadata_raw['File_Name'],
         
-        # 2. Overall Summary
         'Actual_Score': actual_score,
         'Score_Percentage_pct': round(percentage, 2),
         'Grade': grade,
@@ -158,12 +155,11 @@ def process_checklist_data(uploaded_file):
         'Score_สภาพแวดล้อม': group_scores_detailed.get('Score_สภาพแวดล้อม', '0/0'),
         'Score_Documentation_Control': group_scores_detailed.get('Score_Documentation_Control', '0/0'),
         
-        # 4. Detailed Scores (สำหรับ ML/วิเคราะห์เชิงลึก - ข้อมูลจะอยู่ท้ายตาราง)
+        # 4. Detailed Scores (ข้อมูลเชิงลึกที่เหลือ)
         'Total_Questions_Audited': total_possible_questions,
         'Max_Possible_Score': total_possible_score,
     }
     
-    # เพิ่ม Detailed Scores (Actual, Max, Remarks) ที่สร้างไว้ เข้าไปท้ายสุด
     final_summary.update(group_scores_detailed)
 
 
@@ -195,7 +191,6 @@ def save_to_google_sheet(summary_data):
         return False, f"❌ เกิดข้อผิดพลาดในการบันทึก Google Sheet: {e}"
 
 # --- 4. Streamlit UI (แสดงผลตาม Layout ใหม่) ---
-# ... (โค้ดแสดงผลส่วนนี้ไม่มีการเปลี่ยนแปลง) ...
 
 st.set_page_config(layout="wide", page_title="Heat Transfer Audit App")
 st.title("🔥 ระบบประเมิน Heat Transfer Process Audit")
@@ -282,9 +277,19 @@ if uploaded_file is not None:
         ### 5. รายละเอียดการประเมินรายข้อ (แสดงเหมือนแบบฟอร์ม)
         st.header("5. รายละเอียดการประเมินรายข้อ")
         
-        # แสดงเฉพาะคอลัมน์ที่จำเป็น (หัวข้อ, คำถาม, OK, PRN, NRIC, หมายเหตุ)
+        # *** ปรับปรุง: แสดง Header และใช้ Styling เพื่อให้ดูเหมือนฟอร์ม ***
+        
+        # เตรียม DataFrame สำหรับแสดงผล
+        # เราจะสร้างตารางชั่วคราวที่มีเฉพาะคอลัมน์ที่ต้องการ
+        df_display = df_audit_result[['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']].copy()
+        
+        # 5a. ล้างค่าในคอลัมน์ 'หัวข้อ' ออก เพื่อให้แสดงเพียงครั้งเดียว
+        df_display['หัวข้อ'] = df_display['หัวข้อ'].mask(df_display['หัวข้อ'].duplicated(), '')
+        
+        # 5b. จัดเรียงคอลัมน์ใหม่ตามลำดับการแสดงผลที่ผู้ใช้ต้องการ
         st.dataframe(
-            df_audit_result[['หัวข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']],
+            df_display,
+            column_order=['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ'],
             hide_index=True,
             use_container_width=True
         )
