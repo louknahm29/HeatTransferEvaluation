@@ -73,12 +73,12 @@ def process_checklist_data(uploaded_file):
         }
 
 
-    # 2. Loading Audit Questions (*** ส่วนที่ปรับปรุง: Index Shift -1 และ header=15 ***)
+    # 2. Loading Audit Questions
     try:
         uploaded_file.seek(0) 
         
         # Index คอลัมน์ที่ต้องการ: [1: หัวข้อ, 2: เลขข้อ, 3: คำถาม, 5: OK, 6: PRN, 7: NRIC, 8: หมายเหตุ]
-        # ⚠️ NEW: Skip Index 4 (Blank Column) และโหลดถึง Index 8 (หมายเหตุ)
+        # NEW: Skip Index 4 (Blank Column) และโหลดถึง Index 8 (หมายเหตุ)
         col_indices = [1, 2, 3, 5, 6, 7, 8] 
         
         if uploaded_file.name.endswith('.xlsx'):
@@ -283,8 +283,9 @@ if uploaded_file is not None:
             
             group_summary_data.append({
                 'Main Category': category_th,
-                'คะแนนที่ได้': f"{actual} / {max_score}",
-                'เปอร์เซ็นต์ (%)': f"{percentage:.2f}%",
+                'คะแนนที่ได้ (Actual)': actual, # New Column 
+                'คะแนนเต็ม (Max)': max_score,   # New Column
+                'เปอร์เซ็นต์ (%)': f"{percentage:.2f}%", 
                 'หมายเหตุ': remarks_text
             })
 
