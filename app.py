@@ -13,7 +13,8 @@ from googleapiclient.discovery import build
 # --- 1. Global Configuration ---
 # Google Sheet ID และ Worksheet Name
 GOOGLE_SHEET_ID = "1E6WpIgmUBZ2bPpBxSW08ktKUKJGahmzqjVcMDfsqMec"
-WORKSHEET_NAME = "FactoryAudit"
+WORKSHEET_NAME_SUMMARY = "FactoryAudit_Summary" # ชีทสำหรับข้อมูลสรุป
+WORKSHEET_NAME_ITEMIZED = "FactoryAudit_Details" # ชีทสำหรับข้อมูลรายข้อ
 
 # Google Drive Folder ID สำหรับเก็บไฟล์ที่อัปโหลด
 GDRIVE_FOLDER_ID = "1lpKmazYDw907m-2sGF-MfRisNMd3lkzg"
@@ -31,9 +32,9 @@ MAIN_CATEGORIES = [
 
 # ⚠️ NEW: Mapping Category ID (1, 2, 3...) to Full Name
 CATEGORY_ID_MAP = {
-    '1': "1. People (บุคลากร)", '2': "2. Machine (เครื่องจักร)", '3': "3. Materials (วัสดุ)", 
-    '4': "4. Method (วิธีการ)", '5': "5. Measurement (การวัด)", '6': "6. Environment (สภาพแวดล้อม)", 
-    '7': "7. Documentation & Control (เอกสารและการควบคุม)"
+    '1': "1. บุคลากร", '2': "2. เครื่องจักร", '3': "3. วัสดุ", 
+    '4': "4. วิธีการ", '5': "5. การวัด", '6': "6. สภาพแวดล้อม", 
+    '7': "7. Documentation & Control"
 }
 
 
@@ -97,7 +98,7 @@ def process_checklist_data(uploaded_file):
         df_audit['Category_ID'] = df_audit['เลขข้อ'].astype(str).str.split('.', expand=True)[0]
         df_audit = df_audit[df_audit['Category_ID'].isin(CATEGORY_ID_MAP.keys())].reset_index(drop=True)
         
-        # ⚠️ FIX: ใช้ ffill เพื่อเติมเต็มคอลัมน์ 'หัวข้อ' (สำหรับ UI Grouping)
+        # ⚠️ FIX: ใช้ ffill เพื่อเติมเต็มคอลัมน์ 'หัวข้อ' 
         df_audit['หัวข้อ'] = df_audit['หัวข้อ'].ffill() 
 
         
@@ -215,21 +216,12 @@ def upload_file_to_drive(uploaded_file, folder_id):
     except Exception as e:
         return False, f"❌ Error GDrive Upload: {e}"
 
-def automate_storage_and_save(summary_data, uploaded_file):
-    """จัดการการจัดเก็บไฟล์ (Drive) และบันทึกข้อมูล (Sheets)"""
-    
-    # 1. อัปโหลดไฟล์ไปยัง Google Drive
-    drive_success, drive_message = upload_file_to_drive(uploaded_file, GDRIVE_FOLDER_ID)
-    
-    if not drive_success:
-        return False, drive_message
-
-    # 2. บันทึกข้อมูลสรุปไปยัง Google Sheets
+def save_to_google_sheet(summary_data, worksheet_name):
+    """บันทึกข้อมูลสรุปไปยัง Google Sheet (Summary Sheet)"""
     try:
         gc = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
-        
         spreadsheet = gc.open_by_key(GOOGLE_SHEET_ID)
-        worksheet = spreadsheet.worksheet(WORKSHEET_NAME) 
+        worksheet = spreadsheet.worksheet(worksheet_name) 
 
         headers = list(summary_data.keys())
         values = list(summary_data.values())
@@ -239,14 +231,87 @@ def automate_storage_and_save(summary_data, uploaded_file):
 
         worksheet.append_row(values)
         
-        sheet_message = f"บันทึกข้อมูลสำเร็จใน Sheet: **{WORKSHEET_NAME}**"
-        final_message = f"✅ **การทำงานเสร็จสมบูรณ์:** {drive_message}. {sheet_message}"
-        return True, final_message
+        return True, f"บันทึกข้อมูลสรุปสำเร็จใน Sheet: **{worksheet_name}**"
 
     except KeyError:
-        return False, "❌ **Error:** กรุณาตั้งค่า `secrets.toml` และ Service Account Key ให้ถูกต้อง!"
+        raise
     except Exception as e:
         return False, f"❌ Error GSheets Save: {e}"
+        
+def save_itemized_data(df_itemized, summary_metadata, worksheet_name):
+    """บันทึกข้อมูลรายข้อย่อยไปยัง Google Sheet (Details Sheet)"""
+    try:
+        gc = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
+        spreadsheet = gc.open_by_key(GOOGLE_SHEET_ID)
+        worksheet = spreadsheet.worksheet(worksheet_name)
+        
+        # 1. เตรียม Metadata ที่ต้องทำซ้ำในทุกแถว
+        metadata_cols = {
+            'Timestamp': summary_metadata['Timestamp'],
+            'Machine_ID': summary_metadata['Machine_ID'],
+            'Auditor': summary_metadata['Auditor'],
+            'Date_of_Audit': summary_metadata['Date_of_Audit'],
+        }
+        
+        # 2. เตรียม DataFrame สำหรับบันทึก
+        df_save = df_itemized.copy()
+        
+        # 3. สร้างคอลัมน์ Metadata นำหน้า
+        for col, val in metadata_cols.items():
+            df_save.insert(0, col, val)
+        
+        # 4. กำหนด Header (ชื่อคอลัมน์) ที่ต้องการใน Google Sheet
+        # ใช้ชื่อสั้นและชื่อที่คำนวณได้สำหรับ Header
+        final_headers = list(metadata_cols.keys()) + [
+            'Category', 'Item_No', 'Question', 'OK_Mark', 'PRN_Mark', 'NRIC_Mark', 'Remark', 'Score_Value'
+        ]
+        
+        # 5. เตรียมข้อมูลเป็น List of Lists
+        # NOTE: เราเลือกเฉพาะคอลัมน์ที่ต้องการจาก df_save
+        df_to_export = df_save[['Timestamp', 'Machine_ID', 'Auditor', 'Date_of_Audit', 
+                                'หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ', 'Score']]
+        
+        # 6. แปลงชื่อคอลัมน์ภายในเป็นชื่อ Header สุดท้าย
+        df_to_export.columns = final_headers
+
+        # 7. บันทึก
+        data_to_append = df_to_export.values.tolist()
+        
+        if worksheet.row_values(1) != final_headers:
+            worksheet.append_row(final_headers)
+
+        worksheet.append_rows(data_to_append)
+        
+        return True, f"บันทึกข้อมูลรายข้อย่อยสำเร็จใน Sheet: **{worksheet_name}**"
+
+    except Exception as e:
+        return False, f"❌ Error Itemized Save: {e}"
+
+def automate_storage_and_save(summary_data, df_audit_result, uploaded_file):
+    """จัดการการจัดเก็บไฟล์ (Drive), บันทึกข้อมูลสรุป (Summary) และบันทึกข้อมูลย่อย (Details)"""
+    
+    # 1. อัปโหลดไฟล์ไปยัง Google Drive
+    drive_success, drive_message = upload_file_to_drive(uploaded_file, GDRIVE_FOLDER_ID)
+    
+    if not drive_success:
+        return False, drive_message
+
+    # 2. บันทึกข้อมูลสรุป (Summary)
+    summary_success, summary_message = save_to_google_sheet(summary_data, WORKSHEET_NAME_SUMMARY)
+    
+    if not summary_success:
+        return False, f"{drive_message}. {summary_message}"
+
+    # 3. บันทึกข้อมูลรายข้อย่อย (Itemized Details)
+    # NOTE: เราใช้ df_audit_result ที่ผ่านการประมวลผลแล้ว
+    itemized_success, itemized_message = save_itemized_data(df_audit_result, summary_data, WORKSHEET_NAME_ITEMIZED)
+
+    if not itemized_success:
+        return False, f"{drive_message}. {summary_message}. {itemized_message}"
+
+    # 4. รวมข้อความแจ้งเตือนทั้งหมด
+    final_message = f"✅ **การทำงานเสร็จสมบูรณ์:** {drive_message}. {summary_message}. {itemized_message}"
+    return True, final_message
 
 
 # --- 4. Streamlit UI (แสดงผลตาม Layout ใหม่) ---
@@ -396,7 +461,7 @@ if uploaded_file is not None:
         
         if st.button("บันทึกผลสรุปและจัดเก็บไฟล์ทั้งหมด"):
             # เรียกใช้ฟังก์ชันรวมเพื่ออัปโหลดไฟล์และบันทึกข้อมูล
-            success, message = automate_storage_and_save(summary, uploaded_file)
+            success, message = automate_storage_and_save(summary, df_audit_result, uploaded_file)
             if success:
                 st.success(message)
                 st.write("ข้อมูลทั้งหมด (Metadata, คะแนนรวม, คะแนน 7 ด้าน) ได้ถูกบันทึกใน Google Sheet และไฟล์ต้นฉบับได้ถูกจัดเก็บใน Google Drive เรียบร้อยแล้ว")
