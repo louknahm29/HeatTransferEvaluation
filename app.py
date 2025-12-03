@@ -47,6 +47,7 @@ def process_checklist_data(uploaded_file):
     try:
         uploaded_file.seek(0)
         
+        # ปรับ nrows เป็น 15 เพื่อดึงส่วนหัวทั้งหมด (Row 1-15)
         if uploaded_file.name.endswith('.xlsx'):
             df_metadata = pd.read_excel(uploaded_file, nrows=15, header=None)
         else:
@@ -72,18 +73,21 @@ def process_checklist_data(uploaded_file):
         }
 
 
-    # 2. Loading Audit Questions
+    # 2. Loading Audit Questions (*** ส่วนที่ปรับปรุง: Index Shift -1 และ header=15 ***)
     try:
         uploaded_file.seek(0) 
         
-        # Index คอลัมน์ที่ต้องการ: [1: หัวข้อ, 2: เลขข้อ, 3: คำถาม, 4: OK, 5: PRN, 6: NRIC, 7: หมายเหตุ]
-        col_indices = [1, 2, 3, 4, 5, 6, 7] 
+        # Index คอลัมน์ที่ต้องการ: [1: หัวข้อ, 2: เลขข้อ, 3: คำถาม, 5: OK, 6: PRN, 7: NRIC, 8: หมายเหตุ]
+        # ⚠️ NEW: Skip Index 4 (Blank Column) และโหลดถึง Index 8 (หมายเหตุ)
+        col_indices = [1, 2, 3, 5, 6, 7, 8] 
         
         if uploaded_file.name.endswith('.xlsx'):
+            # ใช้ header=15 (แถวที่ 16)
             df_audit = pd.read_excel(uploaded_file, header=15, usecols=col_indices)
         else:
             df_audit = pd.read_csv(uploaded_file, header=15, usecols=col_indices)
         
+        # กำหนดชื่อคอลัมน์ใหม่ตามลำดับ Index ที่เลือก
         df_audit.columns = ['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']
             
         df_audit = df_audit.dropna(subset=['คำถาม']).reset_index(drop=True)
@@ -120,8 +124,7 @@ def process_checklist_data(uploaded_file):
     group_scores_detailed = {}
     if 'หัวข้อ' in df_audited_q.columns:
         for group, group_df in df_audited_q.groupby('หัวข้อ'):
-            # NOTE: ใช้ group_name ที่ไม่มีเลขนำหน้าสำหรับคีย์ใน Dictionary
-            group_name = group.split('.', 1)[-1].strip().replace(' ', '_').replace('/', '_').replace('&', '').strip() 
+            group_name = group.split('.', 1)[-1].strip().replace(' ', '_').replace('/', '_').replace('&', '').strip()
             group_score = group_df['Score'].sum()
             max_group_score = len(group_df) * SCORE_MAPPING['OK']
             
@@ -153,7 +156,6 @@ def process_checklist_data(uploaded_file):
         'Grade_Level': grade_level,
         'Description': description,
         
-        # 3. Simplified Group Scores (ตามลำดับที่ต้องการ)
         'Score_บุคลากร': group_scores_detailed.get('Score_บุคลากร', '0/0'),
         'Score_เครื่องจักร': group_scores_detailed.get('Score_เครื่องจักร', '0/0'),
         'Score_วัสดุ': group_scores_detailed.get('Score_วัสดุ', '0/0'),
@@ -162,7 +164,6 @@ def process_checklist_data(uploaded_file):
         'Score_สภาพแวดล้อม': group_scores_detailed.get('Score_สภาพแวดล้อม', '0/0'),
         'Score_Documentation_Control': group_scores_detailed.get('Score_Documentation_Control', '0/0'),
         
-        # 4. Detailed Scores (ข้อมูลเชิงลึกที่เหลือ)
         'Total_Questions_Audited': total_possible_questions,
         'Max_Possible_Score': total_possible_score,
     }
@@ -272,7 +273,6 @@ if uploaded_file is not None:
         
         group_summary_data = []
         for category_th in MAIN_CATEGORIES:
-            # NOTE: ใช้วิธีดึงชื่อหมวดหมู่ที่ไม่มีเลขนำหน้าสำหรับคีย์ใน Dictionary
             key_name = category_th.split('.', 1)[-1].strip().replace(' ', '_').replace('&', '').strip() 
             
             actual = summary.get(f'Score_{key_name}_Actual', 0)
@@ -319,7 +319,7 @@ if uploaded_file is not None:
 
         st.markdown("---")
         
-### 5. รายละเอียดการประเมินรายข้อ (แสดงเหมือนแบบฟอร์ม)
+        ### 5. รายละเอียดการประเมินรายข้อ (แสดงเหมือนแบบฟอร์ม)
         st.header("5. รายละเอียดการประเมินรายข้อ")
         
         # เตรียม DataFrame สำหรับแสดงผล
@@ -340,6 +340,7 @@ if uploaded_file is not None:
         )
 
         st.markdown("---")
+        
         ### 6. บันทึกผลสรุป
         st.header("6. บันทึกผลสรุป")
         
