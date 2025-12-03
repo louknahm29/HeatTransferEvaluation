@@ -273,16 +273,16 @@ if uploaded_file is not None:
         st.header("2. ผลการประเมินคะแนนรวม")
         
         col1, col2, col3 = st.columns(3)
-        col1.metric("คะแนนที่ทำได้", f"{summary['Actual_Score']}", f"จาก {summary['Max_Possible_Score']} คะแนน")
-        col2.metric("เปอร์เซ็นต์รวม", f"{summary['Score_Percentage_pct']}%")
-        col3.metric("เกรดรวม", f"{summary['Grade']} ({summary['Grade_Level']})")
+        col1.metric("Actual Score (คะแนนที่ทำได้)", f"{summary['Actual_Score']}", f"จาก {summary['Max_Possible_Score']} คะแนน")
+        col2.metric("Percentage (เปอร์เซ็นต์รวม)", f"{summary['Score_Percentage_pct']}%")
+        col3.metric("Grade (เกรดรวม)", f"{summary['Grade']} ({summary['Grade_Level']})")
 
-        st.info(f"**คำอธิบายผลการประเมิน:** {summary['Description']}")
+        st.info(f"**Description (คำอธิบายผลการประเมิน):** {summary['Description']}")
         
         st.markdown("---")
         
         ### 3. ตารางสรุปคะแนน 7 ด้าน
-        st.header("3. สรุปคะแนนตามด้านการตรวจสอบ (7 Categories)")
+        st.header("3. Summary of Scores by Assessment Categories (7 Categories) (สรุปคะแนนตามด้านการตรวจสอบ (7 ด้าน))")
         
         group_summary_data = []
         for category_th in MAIN_CATEGORIES:
@@ -296,10 +296,10 @@ if uploaded_file is not None:
             
             group_summary_data.append({
                 'Main Category': category_th,
-                'คะแนนที่ได้ (Actual)': actual, 
-                'คะแนนเต็ม (Max)': max_score,
-                'เปอร์เซ็นต์ (%)': f"{percentage:.2f}%", 
-                'หมายเหตุ': remarks_text
+                ' Actual Score (คะแนนที่ได้)': actual, 
+                ' Total Score (คะแนนเต็ม)': max_score,
+                'Percentage (เปอร์เซ็นต์ (%))': f"{percentage:.2f}%", 
+                'Remark (หมายเหตุ)': remarks_text
             })
 
         df_group_summary = pd.DataFrame(group_summary_data)
@@ -313,19 +313,19 @@ if uploaded_file is not None:
         
         ### 4. ข้อมูลทั่วไป (Metadata)
         
-        st.header("4. ข้อมูลทั่วไป")
+        st.header("4. Information (ข้อมูลทั่วไป)")
         
         # จัด Metadata ในรูปแบบตาราง 2 คอลัมน์
         metadata_map = {
-            'วันที่ตรวจสอบ': summary.get('Date_of_Audit'),
-            'เวลา/รอบการทำงาน': summary.get('Time_Shift'),
-            'โรงงาน': summary.get('Factory'),
-            'พื้นที่ตรวจสอบ': summary.get('Work_Area'),
-            'Machine ID/เครื่องจักร': summary.get('Machine_ID'),
-            'ผู้ตรวจสอบ': summary.get('Auditor'),
-            'ผู้ปฏิบัติงาน': summary.get('Observed_Personnel'),
-            'หัวหน้างาน': summary.get('Supervisor'),
-            'ชื่อไฟล์ที่อัปโหลด': summary.get('File_Name'),
+            'Date of Audit (วันที่ตรวจสอบ)': summary.get('Date_of_Audit'),
+            'Time of (Audit) เวลา/รอบการทำงาน': summary.get('Time_Shift'),
+            'Factory (โรงงาน)': summary.get('Factory'),
+            'Work Area (พื้นที่ตรวจสอบ)': summary.get('Work_Area'),
+            'Machine ID (หมายเลขเครื่องจักร)': summary.get('Machine_ID'),
+            'Auditor (ผู้ตรวจสอบ)': summary.get('Auditor'),
+            'Observed Personnel (ผู้ปฏิบัติงาน)': summary.get('Observed_Personnel'),
+            'Supervisor (หัวหน้างาน)': summary.get('Supervisor'),
+            'File Name (ชื่อไฟล์ที่อัปโหลด)': summary.get('File_Name'),
         }
         
         df_metadata_table = pd.DataFrame(metadata_map.items(), columns=['หัวข้อ', 'ข้อมูล'])
@@ -334,21 +334,21 @@ if uploaded_file is not None:
         st.markdown("---")
         
         ### 5. รายละเอียดการประเมินรายข้อ (แสดงเหมือนแบบฟอร์ม)
-        st.header("5. รายละเอียดการประเมินรายข้อ")
+        st.header("5. Detailed Evaluation by Item (รายละเอียดการประเมินรายข้อ)")
         
         # เตรียม DataFrame สำหรับแสดงผล
-        df_display = df_audit_result[['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']].copy()
+        df_display = df_audit_result[[ 'Main Cetegory (หัวข้อหลัก)', 'No. (ข้อที่)', 'Question (คำถาม)', 'OK (3)', 'PRN (2)', 'NRIC (1)', 'Remark (หมายเหตุ)']].copy()
         
         # 5a. ล้างค่าในคอลัมน์ 'หัวข้อ' ออก เพื่อให้แสดงเพียงครั้งเดียว
         df_display['หัวข้อ'] = df_display['หัวข้อ'].mask(df_display['หัวข้อ'].duplicated(), '')
         
         # 5b. ทำความสะอาดค่าว่าง/None ในคอลัมน์คะแนน/หมายเหตุ 
-        cols_to_clean = ['OK', 'PRN', 'NRIC', 'หมายเหตุ']
+        cols_to_clean = ['OK (3)', 'PRN (2)', 'NRIC (1)', 'Remark (หมายเหตุ)']
         df_display[cols_to_clean] = df_display[cols_to_clean].fillna('')
 
         st.dataframe(
             df_display,
-            column_order=['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ'],
+            column_order=['Main Cetegory (หัวข้อหลัก)', 'No. (ข้อที่)', 'Question (คำถาม)', 'OK (3)', 'PRN (2)', 'NRIC (1)', 'Remark (หมายเหตุ)'],
             hide_index=True,
             use_container_width=True
         )
@@ -356,7 +356,7 @@ if uploaded_file is not None:
         st.markdown("---")
         
         ### 6. บันทึกผลสรุป
-        st.header("6. บันทึกผลสรุป")
+        st.header("6. Recorded Summary (บันทึกผลสรุป)")
         
         if st.button("บันทึกผลสรุปและจัดเก็บไฟล์ทั้งหมด"):
             # เรียกใช้ฟังก์ชันรวมเพื่ออัปโหลดไฟล์และบันทึกข้อมูล
