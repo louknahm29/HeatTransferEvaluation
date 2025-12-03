@@ -297,7 +297,7 @@ if uploaded_file is not None:
             percentage = (actual / max_score) * 100 if max_score > 0 else 0
             
             group_summary_data.append({
-                'Main Category (ด้าน)': category_th.replace(' (', '\n('),
+                'Main Category (ด้าน)': category_th.replace(' (', '\n('), # NEW: Multiline Category
                 'Actual Score (คะแนนที่ได้)': actual, 
                 'Total Score (คะแนนเต็ม)': max_score,
                 'Percentage (%)': f"{percentage:.2f}%", 
