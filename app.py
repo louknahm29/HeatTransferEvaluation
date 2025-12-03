@@ -29,6 +29,14 @@ MAIN_CATEGORIES = [
     "5. การวัด", "6. สภาพแวดล้อม", "7. Documentation & Control"
 ]
 
+# ⚠️ NEW: Mapping Category ID (1, 2, 3...) to Full Name
+CATEGORY_ID_MAP = {
+    '1': "1. บุคลากร", '2': "2. เครื่องจักร", '3': "3. วัสดุ", 
+    '4': "4. วิธีการ", '5': "5. การวัด", '6': "6. สภาพแวดล้อม", 
+    '7': "7. Documentation & Control"
+}
+
+
 def get_grade_and_description(percentage):
     """กำหนดเกรดและคำอธิบายตามเปอร์เซ็นต์คะแนนรวม"""
     if percentage >= 90:
@@ -47,13 +55,11 @@ def process_checklist_data(uploaded_file):
     try:
         uploaded_file.seek(0)
         
-        # ปรับ nrows เป็น 15 เพื่อดึงส่วนหัวทั้งหมด (Row 1-15)
         if uploaded_file.name.endswith('.xlsx'):
             df_metadata = pd.read_excel(uploaded_file, nrows=15, header=None)
         else:
             df_metadata = pd.read_csv(uploaded_file, nrows=15, header=None)
         
-        # Mapping ข้อมูลจากตำแหน่งเซลล์ในไฟล์ (อิงตาม Value Column Index)
         metadata_raw = {
             'Date_of_Audit': df_metadata.iloc[3, 2],
             'Time_Shift': df_metadata.iloc[3, 5],
@@ -78,19 +84,21 @@ def process_checklist_data(uploaded_file):
         uploaded_file.seek(0) 
         
         # Index คอลัมน์ที่ต้องการ: [1: หัวข้อ, 2: เลขข้อ, 3: คำถาม, 5: OK, 6: PRN, 7: NRIC, 8: หมายเหตุ]
-        # NEW: Skip Index 4 (Blank Column) และโหลดถึง Index 8 (หมายเหตุ)
         col_indices = [1, 2, 3, 5, 6, 7, 8] 
         
         if uploaded_file.name.endswith('.xlsx'):
-            # ใช้ header=15 (แถวที่ 16)
-            df_audit = pd.read_excel(uploaded_file, header=15, usecols=col_indices)
+            df_audit = pd.read_excel(uploaded_file, header=13, usecols=col_indices)
         else:
-            df_audit = pd.read_csv(uploaded_file, header=15, usecols=col_indices)
+            df_audit = pd.read_csv(uploaded_file, header=13, usecols=col_indices)
         
-        # กำหนดชื่อคอลัมน์ใหม่ตามลำดับ Index ที่เลือก
         df_audit.columns = ['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']
             
-        df_audit = df_audit.dropna(subset=['คำถาม']).reset_index(drop=True)
+        # ⚠️ NEW: Clean up and extract Category ID
+        df_audit = df_audit.dropna(subset=['คำถาม']).copy() # Remove non-question rows
+        # ดึงตัวเลขตัวแรกจาก เลขข้อ (e.g., '1.1' -> '1')
+        df_audit['Category_ID'] = df_audit['เลขข้อ'].astype(str).str.split('.', expand=True)[0]
+        # กรองเฉพาะแถวที่มี ID ตรงกับ Main Categories
+        df_audit = df_audit[df_audit['Category_ID'].isin(CATEGORY_ID_MAP.keys())].reset_index(drop=True)
         
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการอ่านไฟล์หรือโครงสร้างคอลัมน์ไม่ถูกต้อง: {e}")
@@ -112,7 +120,7 @@ def process_checklist_data(uploaded_file):
             df_audit.loc[index, 'Scoring Category'] = 'NRIC'
 
 
-    # 4. Summary and Group Scoring
+    # 4. Summary and Group Scoring (*** ใช้ Category_ID ในการ Group ***)
     df_audited_q = df_audit[df_audit['Score'] > 0]
     total_possible_questions = len(df_audited_q) 
     actual_score = df_audited_q['Score'].sum()
@@ -122,15 +130,22 @@ def process_checklist_data(uploaded_file):
 
     # 4a. คำนวณคะแนนและ Remarks รายหมวดหมู่
     group_scores_detailed = {}
-    if 'หัวข้อ' in df_audited_q.columns:
-        for group, group_df in df_audited_q.groupby('หัวข้อ'):
-            group_name = group.split('.', 1)[-1].strip().replace(' ', '_').replace('/', '_').replace('&', '').strip()
+    
+    # ⚠️ NEW: Grouping ด้วย Category_ID แทน 'หัวข้อ'
+    if 'Category_ID' in df_audited_q.columns:
+        for category_id, group_df in df_audited_q.groupby('Category_ID'):
+            
+            # ใช้ CATEGORY_ID_MAP เพื่อดึงชื่อเต็ม (e.g., '1. บุคลากร')
+            group_full_name = CATEGORY_ID_MAP.get(category_id, 'Unknown')
+            group_name = group_full_name.split('.', 1)[-1].strip().replace(' ', '_').replace('/', '_').replace('&', '').strip()
+            
             group_score = group_df['Score'].sum()
             max_group_score = len(group_df) * SCORE_MAPPING['OK']
             
             group_remarks_list = group_df['หมายเหตุ'].dropna().tolist()
             group_remarks_text = "; ".join(group_remarks_list)
             
+            # เก็บข้อมูลเชิงลึก
             group_scores_detailed[f'Score_{group_name}'] = f"{group_score}/{max_group_score}"
             group_scores_detailed[f'Score_{group_name}_Actual'] = group_score
             group_scores_detailed[f'Score_{group_name}_Max'] = max_group_score
@@ -156,6 +171,7 @@ def process_checklist_data(uploaded_file):
         'Grade_Level': grade_level,
         'Description': description,
         
+        # 3. Simplified Group Scores (ตามลำดับที่ต้องการ)
         'Score_บุคลากร': group_scores_detailed.get('Score_บุคลากร', '0/0'),
         'Score_เครื่องจักร': group_scores_detailed.get('Score_เครื่องจักร', '0/0'),
         'Score_วัสดุ': group_scores_detailed.get('Score_วัสดุ', '0/0'),
@@ -164,6 +180,7 @@ def process_checklist_data(uploaded_file):
         'Score_สภาพแวดล้อม': group_scores_detailed.get('Score_สภาพแวดล้อม', '0/0'),
         'Score_Documentation_Control': group_scores_detailed.get('Score_Documentation_Control', '0/0'),
         
+        # 4. Detailed Scores (ข้อมูลเชิงลึกที่เหลือ)
         'Total_Questions_Audited': total_possible_questions,
         'Max_Possible_Score': total_possible_score,
     }
@@ -273,7 +290,7 @@ if uploaded_file is not None:
         
         group_summary_data = []
         for category_th in MAIN_CATEGORIES:
-            key_name = category_th.split('.', 1)[-1].strip().replace(' ', '_').replace('&', '').strip() 
+            key_name = category_th.split('.', 1)[-1].strip().replace(' ', '_').replace('&', '').strip()
             
             actual = summary.get(f'Score_{key_name}_Actual', 0)
             max_score = summary.get(f'Score_{key_name}_Max', 0)
@@ -283,8 +300,8 @@ if uploaded_file is not None:
             
             group_summary_data.append({
                 'Main Category': category_th,
-                'คะแนนที่ได้ (Actual)': actual, # New Column 
-                'คะแนนเต็ม (Max)': max_score,   # New Column
+                'คะแนนที่ได้ (Actual)': actual, 
+                'คะแนนเต็ม (Max)': max_score,
                 'เปอร์เซ็นต์ (%)': f"{percentage:.2f}%", 
                 'หมายเหตุ': remarks_text
             })
