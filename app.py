@@ -31,9 +31,9 @@ MAIN_CATEGORIES = [
 
 # ⚠️ NEW: Mapping Category ID (1, 2, 3...) to Full Name
 CATEGORY_ID_MAP = {
-    '1': "1. People (บุคลากร)", '2': "2. Machine (เครื่องจักร)", '3': "3. Materials (วัสดุ)", 
-    '4': "4. Method (วิธีการ)", '5': "5. Measurement (การวัด)", '6': "6. Environment (สภาพแวดล้อม)", 
-    '7': "7. Documentation & Control (เอกสารและการควบคุม)"
+    '1': "1. บุคลากร", '2': "2. เครื่องจักร", '3': "3. วัสดุ", 
+    '4': "4. วิธีการ", '5': "5. การวัด", '6': "6. สภาพแวดล้อม", 
+    '7': "7. Documentation & Control"
 }
 
 
@@ -295,11 +295,11 @@ if uploaded_file is not None:
             percentage = (actual / max_score) * 100 if max_score > 0 else 0
             
             group_summary_data.append({
-                'Main Category (ด้าน)': category_th,
-                'คะแนนที่ได้ (Actual)': actual, 
-                'คะแนนเต็ม (Max)': max_score,
-                'เปอร์เซ็นต์ (%)': f"{percentage:.2f}%", 
-                'หมายเหตุ': remarks_text
+                'Main Category (ด้าน)': category_th.replace(' (', '\n('), # NEW: Multiline Category
+                'Actual Score (คะแนนที่ได้)': actual, 
+                'Total Score (คะแนนเต็ม)': max_score,
+                'Percentage (%)': f"{percentage:.2f}%", 
+                'Remark (หมายเหตุ)': remarks_text
             })
 
         df_group_summary = pd.DataFrame(group_summary_data)
@@ -315,6 +315,19 @@ if uploaded_file is not None:
         
         st.header("4. Information (ข้อมูลทั่วไป)")
         
+        # 4a. กำหนด Map สำหรับ Multiline Headers
+        METADATA_HEADERS_MAP = {
+            'Date of Audit (วันที่ตรวจสอบ)': 'Date of Audit\n(วันที่ตรวจสอบ)',
+            'Time of Audit (เวลา/รอบการทำงาน)': 'Time of Audit\n(เวลา/รอบการทำงาน)',
+            'Factory (โรงงาน)': 'Factory\n(โรงงาน)',
+            'Work Area (พื้นที่ตรวจสอบ)': 'Work Area\n(พื้นที่ตรวจสอบ)',
+            'Machine ID (หมายเลขเครื่องจักร)': 'Machine ID\n(หมายเลขเครื่องจักร)',
+            'Auditor (ผู้ตรวจสอบ)': 'Auditor\n(ผู้ตรวจสอบ)',
+            'Observed Personnel (ผู้ปฏิบัติงาน)': 'Observed Personnel\n(ผู้ปฏิบัติงาน)',
+            'Supervisor (หัวหน้างาน)': 'Supervisor\n(หัวหน้างาน)',
+            'File Name (ชื่อไฟล์ที่อัปโหลด)': 'File Name\n(ชื่อไฟล์ที่อัปโหลด)',
+        }
+        
         # จัด Metadata ในรูปแบบตาราง 2 คอลัมน์
         metadata_map = {
             'Date of Audit (วันที่ตรวจสอบ)': summary.get('Date_of_Audit'),
@@ -328,36 +341,45 @@ if uploaded_file is not None:
             'File Name (ชื่อไฟล์ที่อัปโหลด)': summary.get('File_Name'),
         }
         
-        df_metadata_table = pd.DataFrame(metadata_map.items(), columns=['Header (หัวข้อ)', 'Data (ข้อมูล)'])
-        st.dataframe(df_metadata_table, hide_index=True, use_container_width=True)
+        # สร้าง DataFrame ชั่วคราวและเปลี่ยนชื่อคอลัมน์เพื่อแสดงผล Multiline
+        df_metadata_table = pd.DataFrame(metadata_map.items(), columns=['Internal Header', 'ข้อมูล'])
+        df_metadata_table['Header (หัวข้อ)'] = df_metadata_table['Internal Header'].apply(lambda x: METADATA_HEADERS_MAP.get(x, x))
+        
+        st.dataframe(
+            df_metadata_table[['Header (หัวข้อ)', 'ข้อมูล']], 
+            hide_index=True, 
+            use_container_width=True
+        )
 
         st.markdown("---")
         
         ### 5. รายละเอียดการประเมินรายข้อ (แสดงเหมือนแบบฟอร์ม)
         st.header("5. Detailed Evaluation by Item (รายละเอียดการประเมินรายข้อ)")
         
+        # 5a. สร้าง Map สำหรับคอลัมน์แสดงผล Multiline
+        DISPLAY_COLUMNS_MAP = {
+            'หัวข้อ': 'Main Category\n(หัวข้อหลัก)',
+            'เลขข้อ': 'No.\n(ข้อที่)',
+            'คำถาม': 'Question\n(คำถาม)',
+            'OK': 'OK\n(3)',
+            'PRN': 'PRN\n(2)',
+            'NRIC': 'NRIC\n(1)',
+            'หมายเหตุ': 'Remark\n(หมายเหตุ)'
+        }
+        
         # เตรียม DataFrame สำหรับแสดงผล
         df_display = df_audit_result[['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']].copy()
         
-        # 5a. ล้างค่าในคอลัมน์ 'หัวข้อ' ออก เพื่อให้แสดงเพียงครั้งเดียว
-        df_display['หัวข้อ'] = df_display['หัวข้อ'].mask(df_display['หัวข้อ'].duplicated(), '')
-        
-        # 5b. ทำความสะอาดค่าว่าง/None ในคอลัมน์คะแนน/หมายเหตุ 
+        # 5b. ทำความสะอาดค่าว่าง/None และ Masking
         cols_to_clean = ['OK', 'PRN', 'NRIC', 'หมายเหตุ']
         df_display[cols_to_clean] = df_display[cols_to_clean].fillna('')
 
-        # 5c. กำหนดชื่อคอลัมน์ภาษาไทย/อังกฤษสำหรับการแสดงผล
-        DISPLAY_COLUMNS_MAP = {
-            'หัวข้อ': 'Category (หัวข้อหลัก)',
-            'เลขข้อ': 'No. (ข้อที่)',
-            'คำถาม': 'Question (คำถาม)',
-            'OK': 'OK (3)',
-            'PRN': 'PRN (2)',
-            'NRIC': 'NRIC (1)',
-            'หมายเหตุ': 'Remark (หมายเหตุ)'
-        }
-        df_display = df_display.rename(columns=DISPLAY_COLUMNS_MAP)
+        # ล้างค่าในคอลัมน์ 'หัวข้อ' ออก เพื่อให้แสดงเพียงครั้งเดียว
+        df_display['หัวข้อ'] = df_display['หัวข้อ'].mask(df_display['หัวข้อ'].duplicated(), '')
         
+        # 5c. เปลี่ยนชื่อคอลัมน์สำหรับแสดงผลในตาราง
+        df_display = df_display.rename(columns=DISPLAY_COLUMNS_MAP)
+
         st.dataframe(
             df_display,
             column_order=list(DISPLAY_COLUMNS_MAP.values()),
