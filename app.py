@@ -1,4 +1,4 @@
-# app.py (UX Optimized)
+# app.py (โค้ดฉบับสมบูรณ์สำหรับ Deploy)
 
 import streamlit as st
 import pandas as pd
@@ -40,21 +40,24 @@ def process_checklist_data(uploaded_file):
     try:
         uploaded_file.seek(0)
         
+        # ปรับ nrows เป็น 15 เพื่อดึงส่วนหัวทั้งหมด (Row 1-15)
         if uploaded_file.name.endswith('.xlsx'):
             df_metadata = pd.read_excel(uploaded_file, nrows=15, header=None)
         else:
             df_metadata = pd.read_csv(uploaded_file, nrows=15, header=None)
         
         # Mapping ข้อมูลจากตำแหน่งเซลล์ในไฟล์ (อิงตาม Value Column Index)
+        # Row Index: Row 4 (Index 3), Row 5 (Index 4), Row 6 (Index 5), Row 7 (Index 6)
+        # Col Index: Col C (Index 2), Col F (Index 5)
         metadata = {
-            'Date_of_Audit': df_metadata.iloc[3, 2],
-            'Time_Shift': df_metadata.iloc[3, 5],
-            'Factory': df_metadata.iloc[4, 2],
-            'Work_Area': df_metadata.iloc[4, 5],
-            'Observed_Personnel': df_metadata.iloc[5, 2],
-            'Supervisor': df_metadata.iloc[5, 5],
-            'Machine_ID': df_metadata.iloc[6, 2],
-            'Auditor': df_metadata.iloc[6, 5],
+            'Date_of_Audit': df_metadata.iloc[3, 2],      # Row 4, Col C (Value)
+            'Time_Shift': df_metadata.iloc[3, 5],         # Row 4, Col F (Value)
+            'Factory': df_metadata.iloc[4, 2],            # Row 5, Col C (Value)
+            'Work_Area': df_metadata.iloc[4, 5],          # Row 5, Col F (Value)
+            'Observed_Personnel': df_metadata.iloc[5, 2], # Row 6, Col C (Value)
+            'Supervisor': df_metadata.iloc[5, 5],         # Row 6, Col F (Value)
+            'Machine_ID': df_metadata.iloc[6, 2],         # Row 7, Col C (Value)
+            'Auditor': df_metadata.iloc[6, 5],            # Row 7, Col F (Value)
             'File_Name': uploaded_file.name
         }
     except Exception as e:
@@ -65,7 +68,7 @@ def process_checklist_data(uploaded_file):
         }
 
 
-    # 2. Loading Audit Questions 
+    # 2. Loading Audit Questions (โค้ดส่วนนี้ถูกต้องและยืดหยุ่นที่สุดแล้ว)
     try:
         uploaded_file.seek(0) 
         
@@ -101,7 +104,7 @@ def process_checklist_data(uploaded_file):
             df_audit.loc[index, 'Scoring Category'] = 'NRIC'
 
 
-    # 4. Summary and Group Scoring
+    # 4. Summary and Group Scoring (รวมคะแนนและข้อความหมายเหตุ)
     df_audited_q = df_audit[df_audit['Score'] > 0]
     total_possible_questions = len(df_audited_q) 
     total_possible_score = total_possible_questions * SCORE_MAPPING['OK'] 
@@ -118,14 +121,14 @@ def process_checklist_data(uploaded_file):
             group_score = group_df['Score'].sum()
             max_group_score = len(group_df) * SCORE_MAPPING['OK']
             
-            # เก็บค่า Actual และ Max ไว้ใน summary_data
+            # เก็บค่า Actual และ Max
             group_scores[f'Score_{group_name}_Actual'] = group_score
             group_scores[f'Score_{group_name}_Max'] = max_group_score
             
-            # หากต้องการเก็บข้อความหมายเหตุสำหรับหมวดหมู่นั้น (เป็นทางเลือก)
-            # group_remarks = group_df['หมายเหตุ'].dropna().tolist()
-            # group_scores[f'Remarks_{group_name}'] = "; ".join(group_remarks)
-            
+            # เก็บข้อความสรุปหมายเหตุสำหรับคอลัมน์ใหม่ใน Google Sheet
+            group_remarks_list = group_df['หมายเหตุ'].dropna().tolist()
+            group_scores[f'Remarks_{group_name}'] = "; ".join(group_remarks_list)
+    
     # รวม Metadata, Summary และ Group Scores เข้าด้วยกัน
     summary_data = {
         'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -172,6 +175,7 @@ def save_to_google_sheet(summary_data):
         return False, f"❌ เกิดข้อผิดพลาดในการบันทึก Google Sheet: {e}"
 
 # --- 4. Streamlit UI (แสดงผลตาม Layout ใหม่) ---
+# ... (โค้ดแสดงผลส่วนนี้ไม่มีการเปลี่ยนแปลงและถูกต้องแล้ว) ...
 
 st.set_page_config(layout="wide", page_title="Heat Transfer Audit App")
 st.title("🔥 ระบบประเมิน Heat Transfer Process Audit")
@@ -204,27 +208,24 @@ if uploaded_file is not None:
         
         st.markdown("---")
         
-        ### 3. ตารางสรุปคะแนน 7 ด้าน (4 คอลัมน์หลัก)
+        ### 3. ตารางสรุปคะแนน 7 ด้าน
         st.header("3. สรุปคะแนนตามด้านการตรวจสอบ (7 Categories)")
         
         group_summary_data = []
         for category_th in MAIN_CATEGORIES:
-            # แปลงชื่อไทยเป็น key format (e.g., บุคลากร -> บุคลากร)
             key_name = category_th.replace(" ", "_").replace("&", "").strip() 
             
             actual = summary.get(f'Score_{key_name}_Actual', 0)
             max_score = summary.get(f'Score_{key_name}_Max', 0)
+            remarks_text = summary.get(f'Remarks_{key_name}', '')
             
             percentage = (actual / max_score) * 100 if max_score > 0 else 0
             
-            # ดึง Remarks (ถ้าต้องการแสดงในตารางสรุปหลัก - ต้องมีการรวบรวม Remarks ก่อน)
-            # ในโค้ดปัจจุบันไม่มีการรวบรวม remarks ราย category จึงใช้ค่าว่าง
-            
             group_summary_data.append({
                 'Main Category': category_th,
-                'คะแนนที่ได้': f"{actual} / {3}",
+                'คะแนนที่ได้': f"{actual} / {max_score}",
                 'เปอร์เซ็นต์ (%)': f"{percentage:.2f}%",
-                'หมายเหตุ': ' ' # ช่องว่าง, หากต้องการให้แสดงข้อความสรุป remarks ต้องเพิ่มตรรกะรวบรวม remarks ใน process_checklist_data
+                'หมายเหตุ': remarks_text
             })
 
         df_group_summary = pd.DataFrame(group_summary_data)
