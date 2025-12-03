@@ -55,11 +55,13 @@ def process_checklist_data(uploaded_file):
     try:
         uploaded_file.seek(0)
         
+        # ปรับ nrows เป็น 15 เพื่อดึงส่วนหัวทั้งหมด (Row 1-15)
         if uploaded_file.name.endswith('.xlsx'):
             df_metadata = pd.read_excel(uploaded_file, nrows=15, header=None)
         else:
             df_metadata = pd.read_csv(uploaded_file, nrows=15, header=None)
         
+        # Mapping ข้อมูลจากตำแหน่งเซลล์ในไฟล์ (อิงตาม Value Column Index)
         metadata_raw = {
             'Date_of_Audit': df_metadata.iloc[3, 2],
             'Time_Shift': df_metadata.iloc[3, 5],
@@ -84,12 +86,14 @@ def process_checklist_data(uploaded_file):
         uploaded_file.seek(0) 
         
         # Index คอลัมน์ที่ต้องการ: [1: หัวข้อ, 2: เลขข้อ, 3: คำถาม, 5: OK, 6: PRN, 7: NRIC, 8: หมายเหตุ]
+        # ⚠️ NOTE: ใช้ [1, 2, 3, 5, 6, 7, 8] เพื่อข้าม Index 4 (คอลัมน์ว่าง)
         col_indices = [1, 2, 3, 5, 6, 7, 8] 
         
         if uploaded_file.name.endswith('.xlsx'):
-            df_audit = pd.read_excel(uploaded_file, header=13, usecols=col_indices)
+            # ใช้ header=15 (แถวที่ 16)
+            df_audit = pd.read_excel(uploaded_file, header=15, usecols=col_indices)
         else:
-            df_audit = pd.read_csv(uploaded_file, header=13, usecols=col_indices)
+            df_audit = pd.read_csv(uploaded_file, header=15, usecols=col_indices)
         
         df_audit.columns = ['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']
             
@@ -131,7 +135,7 @@ def process_checklist_data(uploaded_file):
     # 4a. คำนวณคะแนนและ Remarks รายหมวดหมู่
     group_scores_detailed = {}
     
-    # ⚠️ NEW: Grouping ด้วย Category_ID แทน 'หัวข้อ'
+    # ⚠️ Grouping ด้วย Category_ID แทน 'หัวข้อ'
     if 'Category_ID' in df_audited_q.columns:
         for category_id, group_df in df_audited_q.groupby('Category_ID'):
             
