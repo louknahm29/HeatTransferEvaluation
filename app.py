@@ -144,7 +144,6 @@ def process_checklist_data(uploaded_file):
             group_remarks_list = group_df['หมายเหตุ'].dropna().tolist()
             group_remarks_text = " / ".join(group_remarks_list)
             
-            # เก็บข้อมูลเชิงลึก
             group_scores_detailed[f'Score_{group_name}'] = f"{group_score}/{max_group_score}"
             group_scores_detailed[f'Score_{group_name}_Actual'] = group_score
             group_scores_detailed[f'Score_{group_name}_Max'] = max_group_score
@@ -273,11 +272,10 @@ if uploaded_file is not None:
         # 2. ผลการประเมินคะแนนรวม
         st.header("2. Overall Score Evaluation (ผลการประเมินคะแนนรวม)")
         
-        col1, col2, col3, col4 = st.columns(4) # Changed to 4 columns
+        col1, col2, col3 = st.columns(3)
         col1.metric("Actual Score (คะแนนที่ทำได้)", f"{summary['Actual_Score']}", f"จาก {summary['Max_Possible_Score']} คะแนน")
-        col2.metric("Total Score (คะแนนเต็ม)", f"{summary['Max_Possible_Score']}") # NEW: Total Score
-        col3.metric("Percentage (เปอร์เซ็นต์รวม)", f"{summary['Score_Percentage_pct']}%")
-        col4.metric("Grade (เกรดรวม)", f"{summary['Grade']} ({summary['Grade_Level']})")
+        col2.metric("Percentage (เปอร์เซ็นต์รวม)", f"{summary['Score_Percentage_pct']}%")
+        col3.metric("Grade (เกรดรวม)", f"{summary['Grade']} ({summary['Grade_Level']})")
 
         st.info(f"**Description (คำอธิบายผลการประเมิน):** {summary['Description']}")
         
@@ -298,7 +296,7 @@ if uploaded_file is not None:
             
             group_summary_data.append({
                 'Main Category (ด้าน)': category_th.replace(' (', '\n('), # NEW: Multiline Category
-                'Actual Score (คะแนนที่ทำได้)': actual, 
+                'Actual Score (คะแนนที่ได้)': actual, 
                 'Total Score (คะแนนเต็ม)': max_score,
                 'Percentage (%)': f"{percentage:.2f}%", 
                 'Remark (หมายเหตุ)': remarks_text
@@ -360,7 +358,7 @@ if uploaded_file is not None:
         
         # 5a. สร้าง Map สำหรับคอลัมน์แสดงผล Multiline
         DISPLAY_COLUMNS_MAP = {
-            'หัวข้อ': 'Category\n(หัวข้อหลัก)',
+            'หัวข้อ': 'Main Category\n(หัวข้อหลัก)',
             'เลขข้อ': 'No.\n(ข้อที่)',
             'คำถาม': 'Question\n(คำถาม)',
             'OK': 'OK\n(3)',
@@ -372,14 +370,14 @@ if uploaded_file is not None:
         # เตรียม DataFrame สำหรับแสดงผล
         df_display = df_audit_result[['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']].copy()
         
-        # 5b. ทำความสะอาดค่าว่าง/None ในคอลัมน์คะแนน/หมายเหตุ 
+        # 5b. ทำความสะอาดค่าว่าง/None และ Masking
         cols_to_clean = ['OK', 'PRN', 'NRIC', 'หมายเหตุ']
         df_display[cols_to_clean] = df_display[cols_to_clean].fillna('')
 
-        # 5c. ล้างค่าในคอลัมน์ 'หัวข้อ' ออก เพื่อให้แสดงเพียงครั้งเดียว
+        # ล้างค่าในคอลัมน์ 'หัวข้อ' ออก เพื่อให้แสดงเพียงครั้งเดียว
         df_display['หัวข้อ'] = df_display['หัวข้อ'].mask(df_display['หัวข้อ'].duplicated(), '')
         
-        # 5d. เปลี่ยนชื่อคอลัมน์สำหรับแสดงผลในตาราง
+        # 5c. เปลี่ยนชื่อคอลัมน์สำหรับแสดงผลในตาราง
         df_display = df_display.rename(columns=DISPLAY_COLUMNS_MAP)
 
         st.dataframe(
