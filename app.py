@@ -28,7 +28,6 @@ MAIN_CATEGORIES = [
     "1. บุคลากร", "2. เครื่องจักร", "3. วัสดุ", "4. วิธีการ", 
     "5. การวัด", "6. สภาพแวดล้อม", "7. Documentation & Control"
 ]
-# NOTE: โค้ดจะใช้ชื่อเหล่านี้ในการจัดกลุ่มและสร้าง Header ใน Google Sheet
 
 def get_grade_and_description(percentage):
     """กำหนดเกรดและคำอธิบายตามเปอร์เซ็นต์คะแนนรวม"""
@@ -55,6 +54,7 @@ def process_checklist_data(uploaded_file):
             df_metadata = pd.read_csv(uploaded_file, nrows=15, header=None)
         
         # Mapping ข้อมูลจากตำแหน่งเซลล์ในไฟล์ (อิงตาม Value Column Index)
+        # โค้ดนี้สมมติว่าตำแหน่งของค่า Metadata ไม่เปลี่ยน แม้ส่วนคำถามจะเลื่อน
         metadata_raw = {
             'Date_of_Audit': df_metadata.iloc[3, 2],
             'Time_Shift': df_metadata.iloc[3, 5],
@@ -74,17 +74,18 @@ def process_checklist_data(uploaded_file):
         }
 
 
-    # 2. Loading Audit Questions
+    # 2. Loading Audit Questions (*** ส่วนที่ปรับปรุง: Index Shift -1 ***)
     try:
         uploaded_file.seek(0) 
         
-        # Index คอลัมน์ที่ต้องการ: [1: หัวข้อ, 2: เลขข้อ, 3: คำถาม, 4: OK, 5: PRN, 6: NRIC, 7: หมายเหตุ]
-        col_indices = [1, 2, 3, 4, 5, 6, 7] 
+        # New Index คอลัมน์ที่ต้องการ (Shifted -1 Index): 
+        # [0: หัวข้อ, 1: เลขข้อ, 2: คำถาม, 3: OK, 4: PRN, 5: NRIC, 6: หมายเหตุ]
+        col_indices = [0, 1, 2, 3, 4, 5, 6] 
         
         if uploaded_file.name.endswith('.xlsx'):
-            df_audit = pd.read_excel(uploaded_file, header=15, usecols=col_indices)
+            df_audit = pd.read_excel(uploaded_file, header=13, usecols=col_indices)
         else:
-            df_audit = pd.read_csv(uploaded_file, header=15, usecols=col_indices)
+            df_audit = pd.read_csv(uploaded_file, header=13, usecols=col_indices)
         
         df_audit.columns = ['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']
             
