@@ -1,4 +1,4 @@
-# app.py (โค้ดฉบับสมบูรณ์สำหรับ Deploy)
+# app.py (โค้ดฉบับสมบูรณ์ แก้ไขแล้ว)
 
 import streamlit as st
 import pandas as pd
@@ -8,6 +8,7 @@ import io
 # --- NEW IMPORTS FOR GOOGLE DRIVE API ---
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload # <--- เพิ่มตัวนี้เพื่อแก้ Error Upload
 # ----------------------------------------
 
 # --- 1. Global Configuration ---
@@ -202,12 +203,21 @@ def upload_file_to_drive(uploaded_file, folder_id):
             'name': uploaded_file.name,
             'parents': [folder_id]
         }
-        uploaded_file.seek(0)
-        media_body = io.BytesIO(uploaded_file.getvalue())
+
+        # --- ส่วนที่แก้ไข: ต้องใช้ MediaIoBaseUpload ห่อข้อมูล ---
+        # สร้าง BytesIO stream จากไฟล์ที่อัปโหลด
+        fh = io.BytesIO(uploaded_file.getvalue())
+        
+        # ระบุ Mimetype (ถ้าไม่แน่ใจใช้ application/octet-stream ได้)
+        mimetype = uploaded_file.type if uploaded_file.type else 'application/octet-stream'
+        
+        # ห่อหุ้มไฟล์ด้วย MediaIoBaseUpload
+        media = MediaIoBaseUpload(fh, mimetype=mimetype, resumable=True)
+        # -----------------------------------------------------
 
         file = drive_service.files().create(
             body=file_metadata,
-            media_body=media_body,
+            media_body=media,  # ส่ง media ที่ห่อแล้วไปแทน
             fields='id'
         ).execute()
         
@@ -232,7 +242,17 @@ def automate_storage_and_save(summary_data, uploaded_file):
         worksheet = spreadsheet.worksheet(WORKSHEET_NAME) 
 
         headers = list(summary_data.keys())
-        values = list(summary_data.values())
+        
+        # --- เพิ่มเติม: แปลงข้อมูลให้เป็น Standard Python Types เพื่อป้องกัน GSpread Error ---
+        values = []
+        for v in summary_data.values():
+            if isinstance(v, (pd.Timestamp, datetime)):
+                values.append(str(v))
+            elif hasattr(v, 'item'): # จัดการพวก numpy int64/float64
+                values.append(v.item())
+            else:
+                values.append(v)
+        # ---------------------------------------------------------------------------------
 
         if worksheet.row_values(1) != headers:
             worksheet.append_row(headers)
@@ -395,8 +415,10 @@ if uploaded_file is not None:
         st.header("6. Recorded Summary (บันทึกผลสรุป)")
         
         if st.button("บันทึกผลสรุปและจัดเก็บไฟล์ทั้งหมด"):
-            # เรียกใช้ฟังก์ชันรวมเพื่ออัปโหลดไฟล์และบันทึกข้อมูล
-            success, message = automate_storage_and_save(summary, uploaded_file)
+            with st.spinner('กำลังบันทึกข้อมูล... กรุณารอสักครู่'):
+                # เรียกใช้ฟังก์ชันรวมเพื่ออัปโหลดไฟล์และบันทึกข้อมูล
+                success, message = automate_storage_and_save(summary, uploaded_file)
+                
             if success:
                 st.success(message)
                 st.write("ข้อมูลทั้งหมด (Metadata, คะแนนรวม, คะแนน 7 ด้าน) ได้ถูกบันทึกใน Google Sheet และไฟล์ต้นฉบับได้ถูกจัดเก็บใน Google Drive เรียบร้อยแล้ว")
