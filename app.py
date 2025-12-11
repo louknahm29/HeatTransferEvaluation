@@ -17,7 +17,7 @@ GOOGLE_SHEET_ID = "1E6WpIgmUBZ2bPpBxSW08ktKUKJGahmzqjVcMDfsqMec"
 WORKSHEET_NAME = "FactoryAudit"
 
 # Google Drive Folder ID สำหรับเก็บไฟล์ที่อัปโหลด
-GDRIVE_FOLDER_ID = "1lpKmazYDw907m-2sGF-MfRisNMd3lkzg"
+GDRIVE_FOLDER_ID = "https://drive.google.com/drive/folders/1lpKmazYDw907m-2sGF-MfRisNMd3lkzg?usp=drive_link"
 
 # กำหนดเกณฑ์คะแนน
 SCORE_MAPPING = {
