@@ -17,7 +17,7 @@ GOOGLE_SHEET_ID = "1E6WpIgmUBZ2bPpBxSW08ktKUKJGahmzqjVcMDfsqMec"
 WORKSHEET_NAME = "FactoryAudit"
 
 # Google Drive Folder ID สำหรับเก็บไฟล์ที่อัปโหลด
-GDRIVE_FOLDER_ID = "1lpKmazYDw907m-2sGF-MfRisNMd3lkzg"
+01 - Recieved from Factory = "https://higroup328-my.sharepoint.com/:f:/r/personal/onuma_l_hi-group_com/Documents/PDU%20-%20Product%20Development%20Unit/PDU%20Information/10-Heat%20Transfer%20Project/07-Heat%20Transfer%20Audit/01%20-%20Recieved%20from%20Factory?csf=1&web=1&e=7XFTo5"
 
 # กำหนดเกณฑ์คะแนน
 SCORE_MAPPING = {
