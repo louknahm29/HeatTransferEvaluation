@@ -17,7 +17,7 @@ GOOGLE_SHEET_ID = "1E6WpIgmUBZ2bPpBxSW08ktKUKJGahmzqjVcMDfsqMec"
 WORKSHEET_NAME = "FactoryAudit"
 
 # Google Drive Folder ID สำหรับเก็บไฟล์ที่อัปโหลด
-01 - Recieved from Factory = "1lpKmazYDw907m-2sGF-MfRisNMd3lkzg"
+01 - Recieved from Factory = "D:\Heat Transfer\Factory Evaluation"
 
 # กำหนดเกณฑ์คะแนน
 SCORE_MAPPING = {
