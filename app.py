@@ -1,34 +1,34 @@
-# app.py (เวอร์ชันบันทึกลงเครื่อง Drive D: และบันทึกคะแนนลง Google Sheets)
+# app.py (เวอร์ชันสมบูรณ์: Cloud-to-Cloud / Shared Drive Support)
 
 import streamlit as st
 import pandas as pd
 from datetime import datetime
 import gspread 
 import io 
-import os  # <--- เพิ่ม module นี้เพื่อจัดการไฟล์ในเครื่องคอมพิวเตอร์
+# --- Google Drive API Imports ---
 from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload 
+# ----------------------------------------
 
 # --- 1. Global Configuration ---
-# Google Sheet ID และ Worksheet Name
 GOOGLE_SHEET_ID = "1E6WpIgmUBZ2bPpBxSW08ktKUKJGahmzqjVcMDfsqMec"
 WORKSHEET_NAME = "FactoryAudit"
 
-# 📂 กำหนดโฟลเดอร์ปลายทางในเครื่องคอมพิวเตอร์ (Drive D:)
-# ใช้ r นำหน้าเพื่อบอกว่าเป็น Path ของ Windows
-LOCAL_SAVE_PATH = r"D:\Heat Transfer\Factory Evaluation"
+# ⚠️⚠️ ใส่รหัส Shared Drive Folder ID ที่นี่ (เอาเฉพาะรหัส ไม่เอา Link) ⚠️⚠️
+# ตัวอย่าง: "1lpKmazYDw907m-2sGF-MfRisNMd3lkzg"
+GDRIVE_FOLDER_ID = "ใส่_รหัส_SHARED_DRIVE_ID_ตรงนี้" 
 
 # กำหนดเกณฑ์คะแนน
 SCORE_MAPPING = {
     'OK': 3, 'PRN': 2, 'NRIC': 1, 'Blank': 0 
 }
 
-# กำหนด Main Categories
 MAIN_CATEGORIES = [
     "1. People (บุคลากร)", "2. Machine (เครื่องจักร)", "3. Materials (วัสดุ)", "4. Method (วิธีการ)", 
     "5. Measurement (การวัด)", "6. Environment (สภาพแวดล้อม)", "7. Documentation & Control (เอกสารและการควบคุม)"
 ]
 
-# Mapping Category ID
 CATEGORY_ID_MAP = {
     '1': "1. People (บุคลากร)", '2': "2. Machine (เครื่องจักร)", '3': "3. Materials (วัสดุ)", 
     '4': "4. Method (วิธีการ)", '5': "5. Measurement (การวัด)", '6': "6. Environment (สภาพแวดล้อม)", 
@@ -36,7 +36,6 @@ CATEGORY_ID_MAP = {
 }
 
 def get_grade_and_description(percentage):
-    """กำหนดเกรดและคำอธิบายตามเปอร์เซ็นต์คะแนนรวม"""
     if percentage >= 90:
         return 'A', 'Excellent (ดีเยี่ยม)', 'ปฏิบัติถูกต้องตามมาตรฐานทุกข้อ'
     elif percentage >= 75:
@@ -47,8 +46,6 @@ def get_grade_and_description(percentage):
         return 'D', 'Poor (ไม่ผ่าน)', 'ไม่เป็นไปตามข้อกำหนดหลัก ต้องแก้ไขและตรวจซ้ำ'
 
 def process_checklist_data(uploaded_file):
-    """ทำความสะอาดข้อมูล, คำนวณคะแนน, และสรุปผลจากไฟล์ที่อัปโหลด"""
-    # 1. Loading Metadata
     try:
         uploaded_file.seek(0)
         if uploaded_file.name.endswith('.xlsx'):
@@ -68,13 +65,9 @@ def process_checklist_data(uploaded_file):
             'File_Name': uploaded_file.name
         }
     except Exception as e:
-        metadata_raw = {
-            'Date_of_Audit': 'N/A', 'Time_Shift': 'N/A', 'Factory': 'N/A', 'Work_Area': 'N/A', 
-            'Observed_Personnel': 'N/A', 'Supervisor': 'N/A', 'Machine_ID': 'N/A', 
-            'Auditor': 'N/A', 'File_Name': uploaded_file.name
-        }
+        metadata_raw = {k: 'N/A' for k in ['Date_of_Audit', 'Time_Shift', 'Factory', 'Work_Area', 'Observed_Personnel', 'Supervisor', 'Machine_ID', 'Auditor']}
+        metadata_raw['File_Name'] = uploaded_file.name
 
-    # 2. Loading Audit Questions
     try:
         uploaded_file.seek(0) 
         col_indices = [1, 2, 3, 5, 6, 7, 8] 
@@ -90,10 +83,9 @@ def process_checklist_data(uploaded_file):
         df_audit['หัวข้อ'] = df_audit['หัวข้อ'].ffill() 
         
     except Exception as e:
-        st.error(f"เกิดข้อผิดพลาดในการอ่านไฟล์หรือโครงสร้างคอลัมน์ไม่ถูกต้อง: {e}")
+        st.error(f"เกิดข้อผิดพลาดในการอ่านไฟล์: {e}")
         return None, None, None
 
-    # 3. Scoring
     df_audit['Score'] = 0
     df_audit['Scoring Category'] = 'Blank'
 
@@ -108,7 +100,6 @@ def process_checklist_data(uploaded_file):
             df_audit.loc[index, 'Score'] = SCORE_MAPPING['NRIC']
             df_audit.loc[index, 'Scoring Category'] = 'NRIC'
 
-    # 4. Summary Calculation
     df_audited_q = df_audit[df_audit['Score'] > 0]
     total_possible_questions = len(df_audited_q) 
     actual_score = df_audited_q['Score'].sum()
@@ -116,7 +107,6 @@ def process_checklist_data(uploaded_file):
     percentage = (actual_score / total_possible_score) * 100 if total_possible_score > 0 else 0
     grade, grade_level, description = get_grade_and_description(percentage)
 
-    # 4a. Group Scoring
     group_scores_detailed = {}
     if 'Category_ID' in df_audited_q.columns:
         for category_id, group_df in df_audited_q.groupby('Category_ID'):
@@ -150,47 +140,54 @@ def process_checklist_data(uploaded_file):
         'Description': description,
         'Total_Questions_Audited': total_possible_questions,
         'Max_Possible_Score': total_possible_score,
-        'Score_บุคลากร': group_scores_detailed.get('Score_บุคลากร', '0/0'),
-        'Score_เครื่องจักร': group_scores_detailed.get('Score_เครื่องจักร', '0/0'),
-        'Score_วัสดุ': group_scores_detailed.get('Score_วัสดุ', '0/0'),
-        'Score_วิธีการ': group_scores_detailed.get('Score_วิธีการ', '0/0'),
-        'Score_การวัด': group_scores_detailed.get('Score_การวัด', '0/0'),
-        'Score_สภาพแวดล้อม': group_scores_detailed.get('Score_สภาพแวดล้อม', '0/0'),
-        'Score_Documentation_Control': group_scores_detailed.get('Score_Documentation_Control', '0/0'),
     }
     final_summary.update(group_scores_detailed)
     return df_audit, final_summary, df_audited_q
 
-# --- 3. LOCAL FILE SAVE & GOOGLE SHEETS FUNCTION ---
+# --- 3. SHARED DRIVE UPLOAD & GOOGLE SHEETS ---
 
-def save_file_locally(uploaded_file, save_path):
-    """ฟังก์ชันบันทึกไฟล์ลงเครื่อง (Drive D:)"""
+def upload_file_to_drive(uploaded_file, folder_id):
+    """อัปโหลดไฟล์ไปยัง Shared Drive (มี supportsAllDrives=True)"""
     try:
-        # 1. ตรวจสอบว่ามีโฟลเดอร์หรือไม่ ถ้าไม่มีให้สร้างใหม่
-        if not os.path.exists(save_path):
-            os.makedirs(save_path)
-            
-        # 2. สร้าง Path เต็มรวมชื่อไฟล์ + ใส่ Timestamp กันชื่อซ้ำ
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe_filename = f"{timestamp}_{uploaded_file.name}"
-        full_file_path = os.path.join(save_path, safe_filename)
+        credentials_dict = st.secrets["gcp_service_account"]
+        SCOPES = ['https://www.googleapis.com/auth/drive.file']
+        credentials = service_account.Credentials.from_service_account_info(credentials_dict, scopes=SCOPES)
         
-        # 3. บันทึกไฟล์
-        with open(full_file_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
-            
-        return True, f"บันทึกไฟล์สำเร็จที่: `{full_file_path}`"
+        drive_service = build('drive', 'v3', credentials=credentials)
+        
+        file_metadata = {
+            'name': uploaded_file.name,
+            'parents': [folder_id]
+        }
+
+        # เตรียมไฟล์สำหรับ Upload
+        fh = io.BytesIO(uploaded_file.getvalue())
+        mimetype = uploaded_file.type if uploaded_file.type else 'application/octet-stream'
+        media = MediaIoBaseUpload(fh, mimetype=mimetype, resumable=True)
+
+        # สั่ง Upload (สำคัญ: supportsAllDrives=True)
+        file = drive_service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id',
+            supportsAllDrives=True 
+        ).execute()
+        
+        return True, f"บันทึกไฟล์ลง Drive สำเร็จ (File ID: {file.get('id')})"
     except Exception as e:
-        return False, f"❌ Error Local Save: {e}"
+        return False, f"❌ Error GDrive Upload: {e}"
 
 def automate_storage_and_save(summary_data, uploaded_file):
-    """จัดการบันทึกไฟล์ลงเครื่อง และบันทึกข้อมูลลง Google Sheets"""
     
-    # 1. บันทึกไฟล์ลงเครื่อง (Drive D:)
-    save_success, save_message = save_file_locally(uploaded_file, LOCAL_SAVE_PATH)
+    # 0. เช็คก่อนว่าใส่ ID หรือยัง
+    if "ใส่_รหัส" in GDRIVE_FOLDER_ID:
+        return False, "❌ **Error:** คุณยังไม่ได้ใส่รหัส Folder ID ในโค้ดบรรทัดที่ 19 ครับ"
+
+    # 1. อัปโหลดไฟล์ไปยัง Google Drive
+    drive_success, drive_message = upload_file_to_drive(uploaded_file, GDRIVE_FOLDER_ID)
     
-    if not save_success:
-        return False, save_message # ถ้าบันทึกไฟล์ไม่ได้ ให้หยุดและแจ้ง Error
+    if not drive_success:
+        return False, drive_message # ถ้าอัปโหลดไม่ผ่าน ให้หยุดและแจ้ง Error
 
     # 2. บันทึกข้อมูลสรุปไปยัง Google Sheets
     try:
@@ -203,7 +200,7 @@ def automate_storage_and_save(summary_data, uploaded_file):
         for v in summary_data.values():
             if isinstance(v, (pd.Timestamp, datetime)):
                 values.append(str(v))
-            elif hasattr(v, 'item'): 
+            elif hasattr(v, 'item'):
                 values.append(v.item())
             else:
                 values.append(v)
@@ -214,14 +211,13 @@ def automate_storage_and_save(summary_data, uploaded_file):
         worksheet.append_row(values)
         
         sheet_message = f"บันทึกข้อมูลสำเร็จใน Sheet: **{WORKSHEET_NAME}**"
-        final_message = f"✅ **การทำงานเสร็จสมบูรณ์:** {save_message} <br> {sheet_message}"
+        final_message = f"✅ **เสร็จสมบูรณ์:** {drive_message} <br> {sheet_message}"
         return True, final_message
 
     except KeyError:
-        return False, "❌ **Error:** กรุณาตั้งค่า `secrets.toml` และ Service Account Key ให้ถูกต้อง!"
+        return False, "❌ **Error:** กรุณาตั้งค่า `secrets.toml` ให้ถูกต้อง!"
     except Exception as e:
         return False, f"❌ Error GSheets Save: {e}"
-
 
 # --- 4. Streamlit UI ---
 
@@ -229,22 +225,14 @@ st.set_page_config(layout="wide", page_title="Heat Transfer Audit App")
 st.title("🔥 ระบบประเมิน Heat Transfer Process Audit")
 st.markdown("---")
 
-# 1. Upload
-st.header("1. Upload Heat Transfer Checklist File")
-uploaded_file = st.file_uploader(
-    "อัปโหลดไฟล์ที่กรอกข้อมูลแล้ว (.xlsx หรือ .csv)",
-    type=["xlsx", "csv"]
-)
+uploaded_file = st.file_uploader("อัปโหลดไฟล์ที่กรอกข้อมูลแล้ว (.xlsx หรือ .csv)", type=["xlsx", "csv"])
 
 if uploaded_file is not None:
     st.success(f"Upload successful: **{uploaded_file.name}**")
-
-    # 2. Processing
     df_audit_result, summary, df_audited_q = process_checklist_data(uploaded_file)
 
     if df_audit_result is not None:
         st.markdown("---")
-        # 2. Overall Score
         st.header("2. Overall Score Evaluation (ผลการประเมินคะแนนรวม)")
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("Actual Score", f"{summary['Actual_Score']}", f"จาก {summary['Max_Possible_Score']}")
@@ -254,86 +242,19 @@ if uploaded_file is not None:
         st.info(f"**Description:** {summary['Description']}")
         
         st.markdown("---")
-        # 3. Summary
-        st.header("3. Summary by Categories (7 ด้าน)")
-        group_summary_data = []
-        for category_th in MAIN_CATEGORIES:
-            key_name = category_th.split('.', 1)[-1].strip().replace(' ', '_').replace('&', '').strip()
-            actual = summary.get(f'Score_{key_name}_Actual', 0)
-            max_score = summary.get(f'Score_{key_name}_Max', 0)
-            remarks_text = summary.get(f'Remarks_{key_name}', '')
-            percentage = (actual / max_score) * 100 if max_score > 0 else 0
-            group_summary_data.append({
-                'Main Category': category_th.replace(' (', '\n('), 
-                'Score': f"{actual} / {max_score}", 
-                'Percentage (%)': f"{percentage:.2f}%", 
-                'Remark': remarks_text
-            })
-        st.dataframe(pd.DataFrame(group_summary_data), hide_index=True, use_container_width=True)
-        
-        st.markdown("---")
-        # 4. Metadata
-        st.header("4. Information (ข้อมูลทั่วไป)")
-        METADATA_HEADERS_MAP = {
-            'Date of Audit (วันที่ตรวจสอบ)': 'Date of Audit\n(วันที่ตรวจสอบ)',
-            'Time of Audit (เวลา/รอบการทำงาน)': 'Time of Audit\n(เวลา/รอบการทำงาน)',
-            'Factory (โรงงาน)': 'Factory\n(โรงงาน)',
-            'Work Area (พื้นที่ตรวจสอบ)': 'Work Area\n(พื้นที่ตรวจสอบ)',
-            'Machine ID (หมายเลขเครื่องจักร)': 'Machine ID\n(หมายเลขเครื่องจักร)',
-            'Auditor (ผู้ตรวจสอบ)': 'Auditor\n(ผู้ตรวจสอบ)',
-            'Observed Personnel (ผู้ปฏิบัติงาน)': 'Observed Personnel\n(ผู้ปฏิบัติงาน)',
-            'Supervisor (หัวหน้างาน)': 'Supervisor\n(หัวหน้างาน)',
-            'File Name (ชื่อไฟล์ที่อัปโหลด)': 'File Name\n(ชื่อไฟล์ที่อัปโหลด)',
-        }
-        metadata_map = {
-            'Date of Audit (วันที่ตรวจสอบ)': summary.get('Date_of_Audit'),
-            'Time of Audit (เวลา/รอบการทำงาน)': summary.get('Time_Shift'),
-            'Factory (โรงงาน)': summary.get('Factory'),
-            'Work Area (พื้นที่ตรวจสอบ)': summary.get('Work_Area'),
-            'Machine ID (หมายเลขเครื่องจักร)': summary.get('Machine_ID'),
-            'Auditor (ผู้ตรวจสอบ)': summary.get('Auditor'),
-            'Observed Personnel (ผู้ปฏิบัติงาน)': summary.get('Observed_Personnel'),
-            'Supervisor (หัวหน้างาน)': summary.get('Supervisor'),
-            'File Name (ชื่อไฟล์ที่อัปโหลด)': summary.get('File_Name'),
-        }
-        df_metadata_table = pd.DataFrame(metadata_map.items(), columns=['Internal Header', 'ข้อมูล'])
-        df_metadata_table['Header (หัวข้อ)'] = df_metadata_table['Internal Header'].apply(lambda x: METADATA_HEADERS_MAP.get(x, x))
-        st.dataframe(df_metadata_table[['Header (หัวข้อ)', 'ข้อมูล']], hide_index=True, use_container_width=True)
-
-        st.markdown("---")
-        # 5. Detailed
-        st.header("5. Detailed Evaluation (รายละเอียดรายข้อ)")
-        DISPLAY_COLUMNS_MAP = {
-            'หัวข้อ': 'Category',
-            'เลขข้อ': 'No.',
-            'คำถาม': 'Question',
-            'OK': 'OK',
-            'PRN': 'PRN',
-            'NRIC': 'NRIC',
-            'หมายเหตุ': 'Remark'
-        }
-        df_display = df_audit_result[['หัวข้อ', 'เลขข้อ', 'คำถาม', 'OK', 'PRN', 'NRIC', 'หมายเหตุ']].copy()
-        cols_to_clean = ['OK', 'PRN', 'NRIC', 'หมายเหตุ']
-        df_display[cols_to_clean] = df_display[cols_to_clean].fillna('')
-        df_display['หัวข้อ'] = df_display['หัวข้อ'].mask(df_display['หัวข้อ'].duplicated(), '')
-        df_display = df_display.rename(columns=DISPLAY_COLUMNS_MAP)
-        st.dataframe(df_display, column_order=list(DISPLAY_COLUMNS_MAP.values()), hide_index=True, use_container_width=True)
-
-        st.markdown("---")
-        # 6. Save Button
         st.header("6. Record Data (บันทึกผล)")
         
-        st.info(f"📍 ไฟล์จะถูกบันทึกที่: `{LOCAL_SAVE_PATH}`")
-        
-        if st.button("บันทึกข้อมูลลง Google Sheet และบันทึกไฟล์ลงเครื่อง"):
-            with st.spinner('กำลังบันทึกข้อมูล...'):
+        # แจ้งเตือนผู้ใช้
+        st.info("ℹ️ ระบบจะบันทึกข้อมูลลง Google Sheet และอัปโหลดไฟล์เก็บไว้ใน Shared Drive โดยอัตโนมัติ")
+
+        if st.button("บันทึกข้อมูลและไฟล์"):
+            with st.spinner('กำลังเชื่อมต่อ Google Drive และบันทึกข้อมูล...'):
                 success, message = automate_storage_and_save(summary, uploaded_file)
             if success:
                 st.success(message)
             else:
                 st.error(message)
 
-        # 7. Download
         st.download_button(
             label="⬇️ Download CSV (Backup)",
             data=df_audit_result.to_csv(index=False).encode('utf-8'),
@@ -341,4 +262,4 @@ if uploaded_file is not None:
             mime="text/csv"
         )
 else:
-    st.info("Please upload the filled-out Excel/CSV file.")
+    st.info("กรุณาอัปโหลดไฟล์ Excel เพื่อเริ่มการประเมิน")
