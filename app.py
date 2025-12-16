@@ -17,7 +17,7 @@ GOOGLE_SHEET_ID = "1E6WpIgmUBZ2bPpBxSW08ktKUKJGahmzqjVcMDfsqMec"
 WORKSHEET_NAME = "FactoryAudit"
 
 # ✅ รหัส Folder ID สำหรับเก็บไฟล์ (จากลิงก์ที่คุณให้มา)
-RecievedFromFactory = "C:\\Users\\onuma.l\\OneDrive - Hi-Tech Apparel Co.,Ltd\\PDU - Product Development Unit\\PDU Information\\10-Heat Transfer Project\\07-Heat Transfer Audit"
+GDRIVE_FOLDER_ID = "1lpKmazYDw907m-2sGF-MfRisNMd3lkzg"
 
 # กำหนดเกณฑ์คะแนน
 SCORE_MAPPING = {
